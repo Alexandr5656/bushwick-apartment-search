@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Bushwick / East Williamsburg 3BR Search</title>
 <meta name="description" content="Shared apartment-hunting board for a 3BR search in Bushwick and East Williamsburg.">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
 <style>
   :root{
     --bg:#f6f5f1; --panel:#ffffff; --panel2:#eeece4; --border:#dad7cc;
@@ -70,25 +71,8 @@
 
   .list-panel{overflow-y:auto;border-right:1px solid var(--border);background:var(--bg);height:calc(100vh - 172px);}
   @media (max-width:900px){.list-panel{height:auto;max-height:70vh;}}
-  #map{height:calc(100vh - 172px);width:100%;display:block;background:var(--panel2);}
-  @media (max-width:900px){#map{height:460px;}}
-  .grid-line{ stroke:var(--border); stroke-width:1; }
-  .compass text{ fill:var(--muted-weak); font-size:10px; font-weight:700; letter-spacing:.05em; }
-  .compass line{ stroke:var(--muted-weak); stroke-width:1; }
-  .pin{ cursor:pointer; stroke:var(--panel); stroke-width:2; transition:r .12s; }
-  .pin:hover{ stroke:var(--accent); }
-  .pin.active{ stroke:var(--accent); stroke-width:3; }
-  .pin-label{
-    font-size:10.5px; font-weight:700; fill:var(--text); pointer-events:none;
-    paint-order:stroke; stroke:var(--panel); stroke-width:3px; stroke-linejoin:round;
-  }
-  .tooltip{
-    position:absolute; pointer-events:none; background:var(--panel); border:1px solid var(--border);
-    border-radius:8px; padding:8px 11px; font-size:12px; color:var(--text); box-shadow:0 4px 14px rgba(0,0,0,.18);
-    max-width:220px; opacity:0; transition:opacity .1s; z-index:10;
-  }
-  .tooltip b{ display:block; font-size:12.5px; margin-bottom:2px; }
-  .tooltip .t-rent{ color:var(--accent); font-weight:800; }
+  #map{height:calc(100vh - 172px);width:100%;filter:saturate(var(--map-tiles));}
+  @media (max-width:900px){#map{height:420px;}}
 
   .filters{
     padding:12px 16px;border-bottom:1px solid var(--border);background:var(--panel);
@@ -132,6 +116,11 @@
   .card-features span{font-size:11px;background:var(--good-bg);color:var(--good);padding:2px 8px;border-radius:10px;}
   .card-link{display:inline-block;margin-top:11px;font-size:12.5px;color:var(--accent);text-decoration:none;font-weight:600;}
   .card-link:hover{ text-decoration:underline; }
+
+  .leaflet-popup-content-wrapper{background:var(--panel);color:var(--text);border-radius:8px;}
+  .leaflet-popup-tip{background:var(--panel);}
+  .popup-rent{color:var(--accent);font-weight:800;}
+  .popup-lines{display:flex;gap:3px;margin-top:4px;}
 
   .legend{
     position:absolute; bottom:12px; left:12px; z-index:400; background:var(--panel);
@@ -181,8 +170,7 @@
     <div id="cardContainer"></div>
   </div>
   <div class="map-wrap">
-    <svg id="map" preserveAspectRatio="xMidYMid meet"></svg>
-    <div class="tooltip" id="tooltip"></div>
+    <div id="map"></div>
     <div class="legend">
       <div class="legend-item"><span class="legend-dot" style="background:var(--warn);"></span>Medium confidence</div>
       <div class="legend-item"><span class="legend-dot" style="background:var(--bad);"></span>Low confidence</div>
@@ -193,6 +181,7 @@
   13 candidate listings · Geocoded via OpenStreetMap Nominatim · Rents are asking rents reported at time of search — subject to change.
 </footer>
 
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
 <script>
 const listings = [
   {address:"37 Aberdeen Street", unit:"#3/#4 (uncertain)", neighborhood:"Bushwick", rent:4354, beds:3, baths:2, subway:"L (Halsey St)", lines:["L"], source:"StreetEasy", url:"https://streeteasy.com/building/37-aberdeen-street-brooklyn", features:["Net effective rent (concession implied)","Hardwood floors","New construction"], confidence:"medium", notes:"Price/unit derived from search snippet, not a fetched listing page. Exact unit number and current availability unverified.", lat:40.6819644, lon:-73.9063007},
@@ -210,11 +199,25 @@ const listings = [
   {address:"1157 Myrtle Avenue", unit:"#3B", neighborhood:"Bushwick", rent:4123, beds:3, baths:null, subway:"M, close to J/M/Z", lines:["M","J","Z"], source:"RentHop / Apartments.com", url:"https://www.renthop.com/listings/1157-myrtle-avenue/3b/75750547", features:["Stainless kitchen","Hardwood floors","Queen-sized bedrooms","Virtual doorman (bldg)","Laundry room + gym (bldg)"], confidence:"low", notes:"Listing agent: 346 Realty Leasing (management company). Price cited inconsistently across sources ($3,880–$4,441 range seen) — treat exact figure as approximate.", lat:40.6971695, lon:-73.9346857}
 ];
 
+function isDark(){
+  const s = document.documentElement.getAttribute('data-theme');
+  if(s === 'dark') return true;
+  if(s === 'light') return false;
+  return window.matchMedia('(prefers-color-scheme: dark)').matches;
+}
+
+const map = L.map('map', {scrollWheelZoom:true}).setView([40.700, -73.918], 13.2);
+const tileURL = isDark()
+  ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+  : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
+L.tileLayer(tileURL, {
+  attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+  subdomains: 'abcd', maxZoom: 19
+}).addTo(map);
+
+const markers = {};
 const cardContainer = document.getElementById('cardContainer');
 const resultCount = document.getElementById('resultCount');
-const tooltip = document.getElementById('tooltip');
-const svg = document.getElementById('map');
-const SVG_NS = 'http://www.w3.org/2000/svg';
 
 function confColor(c){
   const style = getComputedStyle(document.documentElement);
@@ -223,108 +226,14 @@ function confColor(c){
 function confLabel(c){ return c === 'medium' ? 'Medium confidence' : 'Low confidence — verify'; }
 function lineBadges(lines){ return lines.map(l => `<span class="line-badge" style="background:var(--line-${l})">${l}</span>`).join(''); }
 
-// Self-contained equirectangular projection (no external tile server available in this sandbox).
-// Longitude is scaled by cos(latitude) so distances read proportionally at this scale.
-const PAD = 0.0035;
-const lats = listings.map(l => l.lat), lons = listings.map(l => l.lon);
-const latMin = Math.min(...lats) - PAD, latMax = Math.max(...lats) + PAD;
-const lonMin = Math.min(...lons) - PAD, lonMax = Math.max(...lons) + PAD;
-const latAvg = (latMin + latMax) / 2;
-const cosLat = Math.cos(latAvg * Math.PI / 180);
-const geoW = (lonMax - lonMin) * cosLat, geoH = (latMax - latMin);
-const VB_W = 1000, VB_H = VB_W * (geoH / geoW);
-svg.setAttribute('viewBox', `0 0 ${VB_W} ${VB_H}`);
-
-function project(lat, lon){
-  const x = ((lon - lonMin) * cosLat / geoW) * VB_W;
-  const y = ((latMax - lat) / geoH) * VB_H;
-  return {x, y};
-}
-
-function buildMap(){
-  svg.innerHTML = '';
-  // reference grid
-  const gridGroup = document.createElementNS(SVG_NS, 'g');
-  const steps = 6;
-  for(let i=0;i<=steps;i++){
-    const gx = (VB_W/steps)*i, gy = (VB_H/steps)*i;
-    const vLine = document.createElementNS(SVG_NS,'line');
-    vLine.setAttribute('class','grid-line'); vLine.setAttribute('x1',gx); vLine.setAttribute('x2',gx);
-    vLine.setAttribute('y1',0); vLine.setAttribute('y2',VB_H);
-    const hLine = document.createElementNS(SVG_NS,'line');
-    hLine.setAttribute('class','grid-line'); hLine.setAttribute('y1',gy); hLine.setAttribute('y2',gy);
-    hLine.setAttribute('x1',0); hLine.setAttribute('x2',VB_W);
-    gridGroup.appendChild(vLine); gridGroup.appendChild(hLine);
-  }
-  svg.appendChild(gridGroup);
-
-  // compass + scale bar
-  const compass = document.createElementNS(SVG_NS,'g');
-  compass.setAttribute('class','compass');
-  compass.innerHTML = `
-    <line x1="${VB_W-40}" y1="${VB_H-24}" x2="${VB_W-40}" y2="${VB_H-46}" marker-end="url(#arrow)"></line>
-    <text x="${VB_W-40}" y="${VB_H-52}" text-anchor="middle">N</text>`;
-  svg.appendChild(compass);
-  const defs = document.createElementNS(SVG_NS,'defs');
-  defs.innerHTML = `<marker id="arrow" markerWidth="8" markerHeight="8" refX="4" refY="0" orient="auto">
-    <path d="M0,4 L4,-4 L8,4 Z" fill="var(--muted-weak)"></path></marker>`;
-  svg.appendChild(defs);
-
-  // ~0.25mi scale bar (0.25mi ≈ 0.00363° latitude)
-  const milesInDeg = 0.00363;
-  const barPx = (milesInDeg / geoH) * VB_H;
-  const barX = 30, barY = VB_H - 30;
-  const scaleGroup = document.createElementNS(SVG_NS,'g');
-  scaleGroup.innerHTML = `
-    <line x1="${barX}" y1="${barY}" x2="${barX+barPx}" y2="${barY}" class="grid-line" stroke-width="2"></line>
-    <text x="${barX}" y="${barY-6}" class="pin-label" style="font-size:9.5px;">¼ mi</text>`;
-  svg.appendChild(scaleGroup);
-
-  const pinsGroup = document.createElementNS(SVG_NS,'g');
-  listings.forEach((l, i) => {
-    const {x, y} = project(l.lat, l.lon);
-    const g = document.createElementNS(SVG_NS,'g');
-    g.dataset.idx = i;
-
-    const label = document.createElementNS(SVG_NS,'text');
-    label.setAttribute('class','pin-label');
-    label.setAttribute('x', x + 10);
-    label.setAttribute('y', y + 4);
-    label.textContent = l.address.split(' ').slice(0,2).join(' ');
-    g.appendChild(label);
-
-    const circle = document.createElementNS(SVG_NS,'circle');
-    circle.setAttribute('class','pin');
-    circle.setAttribute('cx', x); circle.setAttribute('cy', y); circle.setAttribute('r', 8);
-    circle.setAttribute('fill', confColor(l.confidence));
-    circle.dataset.idx = i;
-    g.appendChild(circle);
-
-    g.addEventListener('mouseenter', (e) => showTooltip(e, l));
-    g.addEventListener('mousemove', (e) => positionTooltip(e));
-    g.addEventListener('mouseleave', hideTooltip);
-    g.addEventListener('click', () => selectCard(i));
-
-    pinsGroup.appendChild(g);
-    markers[i] = circle;
-  });
-  svg.appendChild(pinsGroup);
-}
-
-function showTooltip(e, l){
-  tooltip.innerHTML = `<b>${l.address}${l.unit ? ' · '+l.unit : ''}</b>${l.neighborhood}<br><span class="t-rent num">$${l.rent.toLocaleString()}/mo</span> · ${l.beds}BR${l.baths?('/'+l.baths+'BA'):''}`;
-  tooltip.style.opacity = '1';
-  positionTooltip(e);
-}
-function positionTooltip(e){
-  const wrap = document.querySelector('.map-wrap').getBoundingClientRect();
-  tooltip.style.left = (e.clientX - wrap.left + 14) + 'px';
-  tooltip.style.top = (e.clientY - wrap.top + 14) + 'px';
-}
-function hideTooltip(){ tooltip.style.opacity = '0'; }
-
-const markers = {};
-buildMap();
+listings.forEach((l, i) => {
+  const marker = L.circleMarker([l.lat, l.lon], {
+    radius: 9, fillColor: confColor(l.confidence), color:'#fff', weight:2, fillOpacity:0.95
+  }).addTo(map);
+  marker.bindPopup(`<b>${l.address}</b> ${l.unit ? '('+l.unit+')' : ''}<br>${l.neighborhood}<br><span class="popup-rent num">$${l.rent.toLocaleString()}/mo</span> · ${l.beds}BR${l.baths?('/'+l.baths+'BA'):''}<div class="popup-lines">${lineBadges(l.lines)}</div>`);
+  marker.on('click', () => selectCard(i));
+  markers[i] = marker;
+});
 
 function renderCards(items){
   cardContainer.innerHTML = '';
@@ -353,18 +262,18 @@ function renderCards(items){
     `;
     card.addEventListener('click', (e) => {
       if(e.target.tagName === 'A') return;
-      selectCard(i, true);
+      selectCard(i);
+      map.setView([l.lat, l.lon], 15);
+      markers[i].openPopup();
     });
     cardContainer.appendChild(card);
   });
 }
 
-function selectCard(i, fromCard){
+function selectCard(i){
   document.querySelectorAll('.card').forEach(c => c.classList.remove('active'));
-  document.querySelectorAll('.pin').forEach(p => p.classList.remove('active'));
   const card = document.querySelector(`.card[data-idx="${i}"]`);
-  if(card){ card.classList.add('active'); if(fromCard) card.scrollIntoView({behavior:'smooth', block:'nearest'}); }
-  if(markers[i]) markers[i].classList.add('active');
+  if(card){ card.classList.add('active'); card.scrollIntoView({behavior:'smooth', block:'center'}); }
 }
 
 function applyFilters(){
