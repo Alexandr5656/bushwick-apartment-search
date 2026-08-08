@@ -2,9 +2,14 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Bushwick / East Williamsburg 3BR Search</title>
 <meta name="description" content="Shared apartment-hunting board for a 3BR search in Bushwick and East Williamsburg.">
+<meta name="theme-color" content="#0f6e63">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Apt Search">
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%230f6e63'/%3E%3Ctext x='50' y='68' font-size='58' text-anchor='middle' fill='white' font-family='Arial'%3E%F0%9F%8F%A0%3C/text%3E%3C/svg%3E">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
 <style>
   :root{
@@ -14,7 +19,9 @@
     --good:#2e7d5b; --good-bg:#e4f1ea;
     --warn:#9a6b16; --warn-bg:#f6ecd6;
     --bad:#b23a2f; --bad-bg:#f7e5e2;
+    --up:#2e7d5b; --down:#b23a2f;
     --map-tiles: 0.92;
+    --safe-b: env(safe-area-inset-bottom, 0px);
   }
   @media (prefers-color-scheme: dark){
     :root:not([data-theme="light"]){
@@ -24,6 +31,7 @@
       --good:#5bc797; --good-bg:#183328;
       --warn:#e0b354; --warn-bg:#332a15;
       --bad:#e17564; --bad-bg:#33201c;
+      --up:#5bc797; --down:#e17564;
       --map-tiles: 0.85;
     }
   }
@@ -34,53 +42,79 @@
     --good:#5bc797; --good-bg:#183328;
     --warn:#e0b354; --warn-bg:#332a15;
     --bad:#e17564; --bad-bg:#33201c;
+    --up:#5bc797; --down:#e17564;
     --map-tiles: 0.85;
   }
-  /* MTA bullet colors — documentary, not the design accent */
   :root{ --line-L:#a7a9ac; --line-M:#ff6319; --line-J:#996633; --line-Z:#996633; --line-G:#6cbe45; }
 
-  *{box-sizing:border-box;}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
   html,body{margin:0;height:100%;}
   body{
     font-family:-apple-system,"Helvetica Neue",Helvetica,Arial,sans-serif;
     background:var(--bg); color:var(--text);
+    padding-bottom:0;
   }
   .num{ font-family:ui-monospace,"SF Mono",Consolas,"Roboto Mono",monospace; font-variant-numeric:tabular-nums; }
   a{ color:var(--accent); }
+  button{ font-family:inherit; }
   :focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
 
-  header{padding:22px 28px 18px;border-bottom:1px solid var(--border);background:var(--panel);}
+  header{padding:18px 28px 14px;border-bottom:1px solid var(--border);background:var(--panel);}
   .eyebrow{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);font-weight:700;margin:0 0 6px;}
-  header h1{margin:0 0 4px;font-size:22px;font-weight:800;letter-spacing:-.01em;text-wrap:balance;}
-  header p{margin:0;color:var(--muted);font-size:13.5px;max-width:64ch;}
-  .criteria{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;}
+  header h1{margin:0 0 4px;font-size:20px;font-weight:800;letter-spacing:-.01em;text-wrap:balance;}
+  header p{margin:0;color:var(--muted);font-size:13px;max-width:64ch;}
+  .criteria{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;}
   .criteria span{
     background:var(--panel2);border:1px solid var(--border);border-radius:999px;
     padding:5px 12px;font-size:12px;color:var(--text);
   }
   .criteria span b{ font-weight:700; }
 
+  .topbar{
+    display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;
+    padding:10px 28px;border-bottom:1px solid var(--border);background:var(--panel2);
+  }
+  .who{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted);}
+  .who select{background:var(--panel);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:6px 10px;font-size:13px;font-weight:700;}
+  .synctag{font-size:11px;padding:3px 9px;border-radius:999px;font-weight:700;display:inline-flex;align-items:center;gap:5px;}
+  .synctag.live{background:var(--good-bg);color:var(--good);}
+  .synctag.offline{background:var(--bad-bg);color:var(--bad);}
+  .sync-dot{width:6px;height:6px;border-radius:50%;background:currentColor;}
+  .tabs{display:flex;gap:4px;}
+  .tab-btn{
+    background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:7px;
+    padding:7px 14px;font-size:13px;font-weight:700;cursor:pointer;
+  }
+  .tab-btn.active{ background:var(--accent); border-color:var(--accent); color:#fff; }
+  .add-btn{
+    background:var(--accent);color:#fff;border:none;border-radius:7px;padding:7px 14px;
+    font-size:13px;font-weight:700;cursor:pointer;
+  }
+
   .disclaimer{
     background:var(--warn-bg); border-bottom:1px solid var(--border); color:var(--text);
-    font-size:12.5px; padding:11px 28px; line-height:1.55;
+    font-size:12px; padding:10px 28px; line-height:1.5;
   }
   .disclaimer strong{ color:var(--warn); }
+
+  .view{ display:none; }
+  .view.active{ display:block; }
 
   .layout{display:grid;grid-template-columns:minmax(340px,440px) 1fr;}
   @media (max-width:900px){.layout{grid-template-columns:1fr;}}
 
-  .list-panel{overflow-y:auto;border-right:1px solid var(--border);background:var(--bg);height:calc(100vh - 172px);}
-  @media (max-width:900px){.list-panel{height:auto;max-height:70vh;}}
-  #map{height:calc(100vh - 172px);width:100%;filter:saturate(var(--map-tiles));}
-  @media (max-width:900px){#map{height:420px;}}
+  .list-panel{overflow-y:auto;border-right:1px solid var(--border);background:var(--bg);height:calc(100vh - 232px);}
+  @media (max-width:900px){.list-panel{height:auto;max-height:none;border-right:none;}}
+  #map{height:calc(100vh - 232px);width:100%;filter:saturate(var(--map-tiles));}
+  @media (max-width:900px){#map{height:320px;}}
 
   .filters{
-    padding:12px 16px;border-bottom:1px solid var(--border);background:var(--panel);
+    padding:10px 16px;border-bottom:1px solid var(--border);background:var(--panel);
     display:flex;gap:8px;flex-wrap:wrap;align-items:center;position:sticky;top:0;z-index:5;
   }
   .filters input,.filters select{
     background:var(--bg);border:1px solid var(--border);color:var(--text);
-    border-radius:7px;padding:7px 10px;font-size:13px;font-family:inherit;
+    border-radius:7px;padding:8px 10px;font-size:13px;font-family:inherit;
   }
   .filters input{ flex:1; min-width:150px; }
 
@@ -88,15 +122,15 @@
 
   .card{
     margin:8px 12px;padding:14px 16px;background:var(--panel);border:1px solid var(--border);
-    border-radius:10px;cursor:pointer;transition:border-color .12s, transform .12s;
+    border-radius:10px;transition:border-color .12s;
   }
   .card:hover{ border-color:var(--accent); }
   .card.active{ border-color:var(--accent); box-shadow:0 0 0 1px var(--accent); }
-  .card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;}
+  .card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;cursor:pointer;}
   .card-addr{font-weight:700;font-size:14.5px;}
   .card-hood{font-size:11.5px;color:var(--muted);margin-top:2px;}
-  .card-rent{font-size:17px;font-weight:800;color:var(--accent);white-space:nowrap;}
-  .card-rent small{ font-size:10.5px;font-weight:600;color:var(--muted-weak); }
+  .card-rent{font-size:17px;font-weight:800;color:var(--accent);white-space:nowrap;text-align:right;}
+  .card-rent small{ display:block;font-size:10.5px;font-weight:600;color:var(--muted-weak); }
 
   .card-meta{display:flex;gap:6px;margin-top:9px;flex-wrap:wrap;align-items:center;}
   .chip{font-size:11.5px;background:var(--panel2);color:var(--text);padding:3px 9px;border-radius:5px;border:1px solid var(--border);}
@@ -117,6 +151,32 @@
   .card-link{display:inline-block;margin-top:11px;font-size:12.5px;color:var(--accent);text-decoration:none;font-weight:600;}
   .card-link:hover{ text-decoration:underline; }
 
+  .vote-row{display:flex;align-items:center;gap:10px;margin-top:12px;padding-top:12px;border-top:1px dashed var(--border);}
+  .vote-btn{
+    display:flex;align-items:center;gap:6px;border:1px solid var(--border);background:var(--bg);
+    border-radius:7px;padding:7px 12px;font-size:13px;font-weight:700;cursor:pointer;color:var(--text);
+    min-height:36px;
+  }
+  .vote-btn.up.on{ background:var(--good-bg); border-color:var(--good); color:var(--good); }
+  .vote-btn.down.on{ background:var(--bad-bg); border-color:var(--bad); color:var(--bad); }
+  .vote-tally{font-size:12px;color:var(--muted);margin-left:auto;}
+  .voters{font-size:11px;color:var(--muted-weak);margin-top:6px;}
+
+  .comments{margin-top:10px;}
+  .comment{padding:8px 0;border-top:1px solid var(--border);font-size:12.5px;}
+  .comment:first-child{border-top:none;}
+  .comment-head{display:flex;justify-content:space-between;color:var(--muted-weak);font-size:11px;margin-bottom:2px;}
+  .comment-author{font-weight:700;color:var(--text);}
+  .comment-form{display:flex;gap:6px;margin-top:8px;}
+  .comment-form input{
+    flex:1;background:var(--bg);border:1px solid var(--border);color:var(--text);
+    border-radius:7px;padding:8px 10px;font-size:13px;font-family:inherit;min-height:36px;
+  }
+  .comment-form button{
+    background:var(--accent);color:#fff;border:none;border-radius:7px;padding:0 14px;
+    font-size:13px;font-weight:700;cursor:pointer;min-height:36px;
+  }
+
   .leaflet-popup-content-wrapper{background:var(--panel);color:var(--text);border-radius:8px;}
   .leaflet-popup-tip{background:var(--panel);}
   .popup-rent{color:var(--accent);font-weight:800;}
@@ -129,17 +189,71 @@
   }
   .legend-item{ display:flex; align-items:center; gap:5px; }
   .legend-dot{ width:9px; height:9px; border-radius:50%; }
-
   .map-wrap{ position:relative; }
 
-  footer{padding:12px 28px;font-size:11.5px;color:var(--muted-weak);border-top:1px solid var(--border);background:var(--panel);}
+  /* Board view */
+  .board-wrap{ padding:18px 28px; max-width:960px; margin:0 auto; }
+  .board-table{ width:100%; border-collapse:collapse; font-size:13px; }
+  .board-table th{
+    text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted-weak);
+    padding:8px 10px; border-bottom:1px solid var(--border);
+  }
+  .board-table td{ padding:12px 10px; border-bottom:1px solid var(--border); vertical-align:top; }
+  .board-table tr{ cursor:pointer; }
+  .board-table tr:hover td{ background:var(--panel2); }
+  .board-rank{font-weight:800;color:var(--muted-weak);width:28px;}
+  .board-addr{font-weight:700;}
+  .board-hood{font-size:11px;color:var(--muted);}
+  .board-net{font-weight:800;}
+  .board-net.pos{color:var(--good);}
+  .board-net.neg{color:var(--bad);}
+  .board-net.zero{color:var(--muted);}
+  .board-comment-snip{font-size:12px;color:var(--muted);max-width:26ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .table-scroll{ overflow-x:auto; }
+  @media (max-width:640px){ .board-wrap{ padding:14px; } }
+
+  /* Add-listing modal */
+  .modal-backdrop{
+    display:none; position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:1000;
+    align-items:flex-end; justify-content:center;
+  }
+  @media (min-width:640px){ .modal-backdrop{ align-items:center; } }
+  .modal-backdrop.open{ display:flex; }
+  .modal{
+    background:var(--panel); border-radius:14px 14px 0 0; width:100%; max-width:520px;
+    max-height:88vh; overflow-y:auto; padding:20px 20px calc(20px + var(--safe-b));
+  }
+  @media (min-width:640px){ .modal{ border-radius:14px; } }
+  .modal h2{ margin:0 0 14px; font-size:17px; }
+  .modal label{ display:block; font-size:12px; font-weight:700; color:var(--muted); margin:12px 0 5px; }
+  .modal input, .modal select, .modal textarea{
+    width:100%; background:var(--bg); border:1px solid var(--border); color:var(--text);
+    border-radius:7px; padding:9px 11px; font-size:14px; font-family:inherit; min-height:38px;
+  }
+  .modal-actions{ display:flex; gap:8px; margin-top:18px; }
+  .modal-actions button{
+    flex:1; border-radius:8px; padding:11px; font-size:14px; font-weight:700; cursor:pointer; min-height:44px;
+  }
+  .btn-cancel{ background:var(--panel2); border:1px solid var(--border); color:var(--text); }
+  .btn-submit{ background:var(--accent); border:none; color:#fff; }
+  .modal-status{ font-size:12px; color:var(--muted); margin-top:8px; min-height:16px; }
+  .line-checks{ display:flex; gap:10px; flex-wrap:wrap; margin-top:4px; }
+  .line-checks label{ display:flex; align-items:center; gap:5px; font-size:12.5px; font-weight:600; color:var(--text); margin:0; }
+
+  footer{padding:10px 28px calc(10px + var(--safe-b));font-size:11px;color:var(--muted-weak);border-top:1px solid var(--border);background:var(--panel);}
+
+  @media (max-width:900px){
+    header{ padding:14px 16px 12px; }
+    .topbar, .disclaimer{ padding-left:16px; padding-right:16px; }
+    .board-wrap{ padding-bottom:calc(18px + var(--safe-b)); }
+  }
 </style>
 </head>
 <body>
 <header>
-  <p class="eyebrow">Apartment hunt · 3 roommates</p>
+  <p class="eyebrow">Apartment hunt · shared board</p>
   <h1>Bushwick / East Williamsburg — 3BR Search</h1>
-  <p>Shared board for the group. Click a card or map pin for details and the source link.</p>
+  <p>Vote and comment on each listing. Everyone's votes sync here — click Add Listing to add new leads.</p>
   <div class="criteria">
     <span>Target <b>$4,200–$4,450</b></span>
     <span>Ceiling <b>~$4,600</b></span>
@@ -148,155 +262,427 @@
     <span><b>12-month</b> lease</span>
   </div>
 </header>
+<div class="topbar">
+  <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+    <div class="who">
+      Voting as
+      <select id="whoSelect">
+        <option value="Alex">Alex</option>
+        <option value="Mike">Mike</option>
+        <option value="Cameron">Cameron</option>
+      </select>
+    </div>
+    <span class="synctag offline" id="syncTag"><span class="sync-dot"></span>Connecting…</span>
+  </div>
+  <div style="display:flex;align-items:center;gap:8px;">
+    <div class="tabs">
+      <button class="tab-btn active" data-view="listings">Listings</button>
+      <button class="tab-btn" data-view="board">Board</button>
+    </div>
+    <button class="add-btn" id="addBtn">+ Add listing</button>
+  </div>
+</div>
 <div class="disclaimer">
-  <strong>Verify before applying:</strong> major listing sites block automated access, so this was assembled from search snippets, not live listing pages — only 13 of ~40 leads found could be reasonably corroborated. Confirm price, availability, and bed count directly on StreetEasy/RentHop before paying any application fee, especially anything marked <span style="color:var(--bad);font-weight:700;">low confidence</span>.
+  <strong>Verify before applying:</strong> major listing sites block automated access, so base listings were assembled from search snippets, not live pages. Confirm price, availability, and bed count directly on StreetEasy/RentHop before paying any application fee, especially anything marked <span style="color:var(--bad);font-weight:700;">low confidence</span>.
 </div>
-<div class="layout">
-  <div class="list-panel">
-    <div class="filters">
-      <input type="text" id="searchBox" placeholder="Search address or street…">
-      <select id="hoodFilter">
-        <option value="">All areas</option>
-        <option value="Bushwick">Bushwick</option>
-        <option value="East Williamsburg">East Williamsburg</option>
-      </select>
-      <select id="sortBy">
-        <option value="rent-asc">Rent: Low → High</option>
-        <option value="rent-desc">Rent: High → Low</option>
-        <option value="confidence">Confidence first</option>
-      </select>
+
+<div class="view active" id="view-listings">
+  <div class="layout">
+    <div class="list-panel">
+      <div class="filters">
+        <input type="text" id="searchBox" placeholder="Search address or street…">
+        <select id="hoodFilter">
+          <option value="">All areas</option>
+          <option value="Bushwick">Bushwick</option>
+          <option value="East Williamsburg">East Williamsburg</option>
+        </select>
+        <select id="sortBy">
+          <option value="rent-asc">Rent: Low → High</option>
+          <option value="rent-desc">Rent: High → Low</option>
+          <option value="votes-desc">Top voted</option>
+          <option value="confidence">Confidence first</option>
+        </select>
+      </div>
+      <div class="count" id="resultCount"></div>
+      <div id="cardContainer"></div>
     </div>
-    <div class="count" id="resultCount"></div>
-    <div id="cardContainer"></div>
-  </div>
-  <div class="map-wrap">
-    <div id="map"></div>
-    <div class="legend">
-      <div class="legend-item"><span class="legend-dot" style="background:var(--warn);"></span>Medium confidence</div>
-      <div class="legend-item"><span class="legend-dot" style="background:var(--bad);"></span>Low confidence</div>
+    <div class="map-wrap">
+      <div id="map"></div>
+      <div class="legend">
+        <div class="legend-item"><span class="legend-dot" style="background:var(--warn);"></span>Medium confidence</div>
+        <div class="legend-item"><span class="legend-dot" style="background:var(--bad);"></span>Low confidence</div>
+      </div>
     </div>
   </div>
 </div>
-<footer>
-  13 candidate listings · Geocoded via OpenStreetMap Nominatim · Rents are asking rents reported at time of search — subject to change.
-</footer>
+
+<div class="view" id="view-board">
+  <div class="board-wrap">
+    <div class="table-scroll">
+      <table class="board-table">
+        <thead>
+          <tr><th>#</th><th>Listing</th><th class="num">Rent</th><th>Votes</th><th>Latest comment</th></tr>
+        </thead>
+        <tbody id="boardBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<footer id="footerNote">Geocoded via OpenStreetMap Nominatim · Rents are asking rents reported at time of search — subject to change.</footer>
+
+<div class="modal-backdrop" id="addModal">
+  <div class="modal">
+    <h2>Add a listing</h2>
+    <label for="f-address">Address *</label>
+    <input id="f-address" type="text" placeholder="e.g. 123 Grove Street">
+    <label for="f-unit">Unit (optional)</label>
+    <input id="f-unit" type="text" placeholder="e.g. #2R">
+    <label for="f-hood">Neighborhood</label>
+    <select id="f-hood">
+      <option>Bushwick</option>
+      <option>East Williamsburg</option>
+    </select>
+    <label for="f-rent">Monthly rent *</label>
+    <input id="f-rent" type="number" placeholder="4300">
+    <label for="f-beds">Bedrooms / Bathrooms</label>
+    <div style="display:flex;gap:8px;">
+      <input id="f-beds" type="number" placeholder="Beds" value="3" style="width:50%;">
+      <input id="f-baths" type="number" placeholder="Baths (optional)" style="width:50%;">
+    </div>
+    <label>Subway lines nearby</label>
+    <div class="line-checks">
+      <label><input type="checkbox" value="L"> L</label>
+      <label><input type="checkbox" value="M"> M</label>
+      <label><input type="checkbox" value="J"> J</label>
+      <label><input type="checkbox" value="Z"> Z</label>
+      <label><input type="checkbox" value="G"> G</label>
+    </div>
+    <label for="f-url">Listing URL (optional)</label>
+    <input id="f-url" type="url" placeholder="https://…">
+    <label for="f-notes">Notes (optional)</label>
+    <textarea id="f-notes" rows="2" placeholder="Anything worth flagging"></textarea>
+    <div class="modal-status" id="modalStatus"></div>
+    <div class="modal-actions">
+      <button class="btn-cancel" id="modalCancel">Cancel</button>
+      <button class="btn-submit" id="modalSubmit">Add listing</button>
+    </div>
+  </div>
+</div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
 <script>
-const listings = [
-  {address:"37 Aberdeen Street", unit:"#3/#4 (uncertain)", neighborhood:"Bushwick", rent:4354, beds:3, baths:2, subway:"L (Halsey St)", lines:["L"], source:"StreetEasy", url:"https://streeteasy.com/building/37-aberdeen-street-brooklyn", features:["Net effective rent (concession implied)","Hardwood floors","New construction"], confidence:"medium", notes:"Price/unit derived from search snippet, not a fetched listing page. Exact unit number and current availability unverified.", lat:40.6819644, lon:-73.9063007},
-  {address:"67 Stanhope Street", unit:"#2A", neighborhood:"Bushwick", rent:4500, beds:3, baths:2, subway:"J/M/Z (Myrtle-Wyckoff)", lines:["J","M","Z"], source:"StreetEasy / Nooklyn", url:"https://streeteasy.com/building/67-stanhope-street-brooklyn", features:["Built 2018","Laundry","Shared backyard","Shared rooftop"], confidence:"medium", notes:"Building confirmed real; unit 2A price/availability unverified directly. Newer construction, possibly rent-stabilized.", lat:40.6963623, lon:-73.9249699},
-  {address:"386 Stockholm Street", unit:"#2L", neighborhood:"Bushwick", rent:4350, beds:3, baths:null, subway:"L/M (Central Ave)", lines:["L","M"], source:"Compass", url:"https://www.compass.com/for-rent/bushwick-brooklyn-ny/", features:["No fee","Possible 1-month-free concession"], confidence:"low", notes:"Exact address (386) not independently confirmed — nearby numbers on Stockholm St verified real, this one wasn't. Treat as approximate.", lat:40.7051083, lon:-73.9170802},
-  {address:"828 Hart Street", unit:"#3B/#3L", neighborhood:"Bushwick", rent:4395, beds:3, baths:null, subway:"L (near Bushwick Park)", lines:["L"], source:"StreetEasy / RentHop", url:"https://streeteasy.com/building/828-hart-street-brooklyn", features:["In-unit laundry","No parking","Not pet-friendly"], confidence:"low", notes:"May no longer be available. Building has reported rodent complaints (8 sightings Apr 2024–May 2025 per violation records) — ask directly.", lat:40.7018046, lon:-73.9225811},
-  {address:"271 Bleecker Street", unit:"#3", neighborhood:"Bushwick", rent:4000, beds:3, baths:null, subway:"M train, close access", lines:["M"], source:"StreetEasy / CityRealty", url:"https://streeteasy.com/building/271-bleecker-street-brooklyn", features:["Dishwasher","Heat/hot water included"], confidence:"medium", notes:"At the low end of budget — good value if still available. Unit-level details not independently confirmed.", lat:40.6995165, lon:-73.9171855},
-  {address:"368 Evergreen Avenue", unit:"#3", neighborhood:"Bushwick", rent:4350, beds:3, baths:2, subway:"L/J/M/Z area", lines:["L","J","M","Z"], source:"StreetEasy / Zillow", url:"https://streeteasy.com/building/368-evergreen-avenue-brooklyn", features:[], confidence:"low", notes:"Price partly from a Zillow algorithmic 'Rent Zestimate,' not a confirmed asking price — Zillow shows no units currently available. Building has open maintenance complaints (water damage, electrical, heating).", lat:40.6940509, lon:-73.9239917},
-  {address:"17 Jefferson Street", unit:"#2", neighborhood:"Bushwick", rent:4299, beds:3, baths:2, subway:"L/M/G, Bushwick area", lines:["L","M","G"], source:"Apartments.com", url:"https://www.apartments.com/bushwick-brooklyn-ny/3-bedrooms/", features:[], confidence:"low", notes:"Address/price from search snippet only; listing page not directly fetched. Right at the sweet-spot price if accurate.", lat:40.6975646, lon:-73.9349230},
-  {address:"673 Knickerbocker Avenue", unit:"#2", neighborhood:"Bushwick", rent:4599, beds:3, baths:2, subway:"L (Jefferson St) / M", lines:["L","M"], source:"Apartments.com", url:"https://www.apartments.com/bushwick-brooklyn-ny/3-bedrooms/", features:[], confidence:"low", notes:"At the very top of stated budget/ceiling. Not independently verified beyond search snippet.", lat:40.6950610, lon:-73.9113725},
-  {address:"99 Grattan Street", unit:"#3L", neighborhood:"East Williamsburg", rent:4300, beds:3, baths:null, subway:"L (Morgan Ave, ~5 min walk)", lines:["L"], source:"StreetEasy / Nooklyn", url:"https://streeteasy.com/building/99-grattan-street-brooklyn", features:["Hardwood floors","Granite counters","Stainless appliances","Laundry"], confidence:"medium", notes:"A 'doorman' amenity claim in one source is likely an aggregation error for this small building — ignore that detail. Address/unit type otherwise looks real.", lat:40.7062397, lon:-73.9291725},
-  {address:"75 Beadel Street", unit:"#3", neighborhood:"East Williamsburg", rent:4300, beds:3, baths:1, subway:"G (Graham Ave, ~0.7mi) — farther from L/M/J/Z", lines:["G"], source:"StreetEasy / Trulia", url:"https://streeteasy.com/property/8592983-75-beadel-street-2r", features:["Open floor plan","In-unit W/D","New kitchen","Hardwood floors"], confidence:"medium", notes:"Farther from L/M/J/Z than most options — closer to G train/Greenpoint border. Unit number inconsistent across sources (#3 vs #2R vs #3L). Confirm commute fit.", lat:40.7218524, lon:-73.9379097},
-  {address:"96 Moore Street", unit:"#2A/#2R", neighborhood:"East Williamsburg", rent:4300, beds:3, baths:null, subway:"L (Morgan Ave)", lines:["L"], source:"RentHop / William Raveis", url:"https://www.renthop.com/listings/96-moore-street/2a/76010904", features:["On-site laundry","Granite counters","Hardwood floors"], confidence:"low", notes:"CAUTION: sources conflict on bedroom count for this price — one broker lists a 2BR at $4,300, another references a 3BR nearby ~$4,450. Verify bed count directly before applying.", lat:40.7036325, lon:-73.9416763},
-  {address:"1327 Halsey Street", unit:"#1R", neighborhood:"Bushwick", rent:4100, beds:3, baths:null, subway:"L (Halsey St / Myrtle-Wyckoff)", lines:["L"], source:"RentHop", url:"https://www.renthop.com/listings/1327-halsey-street/1r/76901411", features:["No broker fee","Hardwood floors","Gas stove","Outdoor space","Cats/dogs allowed"], confidence:"medium", notes:"Sourced from a specific RentHop listing (via snippet, page itself blocked live fetch). Price is below the Bushwick 3BR median, so plausible. Confirm current availability.", lat:40.6945125, lon:-73.9069078},
-  {address:"1157 Myrtle Avenue", unit:"#3B", neighborhood:"Bushwick", rent:4123, beds:3, baths:null, subway:"M, close to J/M/Z", lines:["M","J","Z"], source:"RentHop / Apartments.com", url:"https://www.renthop.com/listings/1157-myrtle-avenue/3b/75750547", features:["Stainless kitchen","Hardwood floors","Queen-sized bedrooms","Virtual doorman (bldg)","Laundry room + gym (bldg)"], confidence:"low", notes:"Listing agent: 346 Realty Leasing (management company). Price cited inconsistently across sources ($3,880–$4,441 range seen) — treat exact figure as approximate.", lat:40.6971695, lon:-73.9346857}
-];
+const KV_BASE = 'https://kvdb.io/AsmSvkAefXc8JJLRmNWQP7/state';
+const POLL_MS = 8000;
 
+const BASE_LISTINGS = [
+  {address:"37 Aberdeen Street", unit:"#3/#4 (uncertain)", neighborhood:"Bushwick", rent:4354, beds:3, baths:2, lines:["L"], source:"StreetEasy", url:"https://streeteasy.com/building/37-aberdeen-street-brooklyn", features:["Net effective rent (concession implied)","Hardwood floors","New construction"], confidence:"medium", notes:"Price/unit derived from search snippet, not a fetched listing page. Exact unit number and current availability unverified.", lat:40.6819644, lon:-73.9063007},
+  {address:"67 Stanhope Street", unit:"#2A", neighborhood:"Bushwick", rent:4500, beds:3, baths:2, lines:["J","M","Z"], source:"StreetEasy / Nooklyn", url:"https://streeteasy.com/building/67-stanhope-street-brooklyn", features:["Built 2018","Laundry","Shared backyard","Shared rooftop"], confidence:"medium", notes:"Building confirmed real; unit 2A price/availability unverified directly. Newer construction, possibly rent-stabilized.", lat:40.6963623, lon:-73.9249699},
+  {address:"386 Stockholm Street", unit:"#2L", neighborhood:"Bushwick", rent:4350, beds:3, baths:null, lines:["L","M"], source:"Compass", url:"https://www.compass.com/for-rent/bushwick-brooklyn-ny/", features:["No fee","Possible 1-month-free concession"], confidence:"low", notes:"Exact address (386) not independently confirmed — nearby numbers on Stockholm St verified real, this one wasn't. Treat as approximate.", lat:40.7051083, lon:-73.9170802},
+  {address:"828 Hart Street", unit:"#3B/#3L", neighborhood:"Bushwick", rent:4395, beds:3, baths:null, lines:["L"], source:"StreetEasy / RentHop", url:"https://streeteasy.com/building/828-hart-street-brooklyn", features:["In-unit laundry","No parking","Not pet-friendly"], confidence:"low", notes:"May no longer be available. Building has reported rodent complaints (8 sightings Apr 2024–May 2025 per violation records) — ask directly.", lat:40.7018046, lon:-73.9225811},
+  {address:"271 Bleecker Street", unit:"#3", neighborhood:"Bushwick", rent:4000, beds:3, baths:null, lines:["M"], source:"StreetEasy / CityRealty", url:"https://streeteasy.com/building/271-bleecker-street-brooklyn", features:["Dishwasher","Heat/hot water included"], confidence:"medium", notes:"At the low end of budget — good value if still available. Unit-level details not independently confirmed.", lat:40.6995165, lon:-73.9171855},
+  {address:"368 Evergreen Avenue", unit:"#3", neighborhood:"Bushwick", rent:4350, beds:3, baths:2, lines:["L","J","M","Z"], source:"StreetEasy / Zillow", url:"https://streeteasy.com/building/368-evergreen-avenue-brooklyn", features:[], confidence:"low", notes:"Price partly from a Zillow algorithmic 'Rent Zestimate,' not a confirmed asking price — Zillow shows no units currently available. Building has open maintenance complaints (water damage, electrical, heating).", lat:40.6940509, lon:-73.9239917},
+  {address:"17 Jefferson Street", unit:"#2", neighborhood:"Bushwick", rent:4299, beds:3, baths:2, lines:["L","M","G"], source:"Apartments.com", url:"https://www.apartments.com/bushwick-brooklyn-ny/3-bedrooms/", features:[], confidence:"low", notes:"Address/price from search snippet only; listing page not directly fetched. Right at the sweet-spot price if accurate.", lat:40.6975646, lon:-73.9349230},
+  {address:"673 Knickerbocker Avenue", unit:"#2", neighborhood:"Bushwick", rent:4599, beds:3, baths:2, lines:["L","M"], source:"Apartments.com", url:"https://www.apartments.com/bushwick-brooklyn-ny/3-bedrooms/", features:[], confidence:"low", notes:"At the very top of stated budget/ceiling. Not independently verified beyond search snippet.", lat:40.6950610, lon:-73.9113725},
+  {address:"99 Grattan Street", unit:"#3L", neighborhood:"East Williamsburg", rent:4300, beds:3, baths:null, lines:["L"], source:"StreetEasy / Nooklyn", url:"https://streeteasy.com/building/99-grattan-street-brooklyn", features:["Hardwood floors","Granite counters","Stainless appliances","Laundry"], confidence:"medium", notes:"A 'doorman' amenity claim in one source is likely an aggregation error for this small building — ignore that detail. Address/unit type otherwise looks real.", lat:40.7062397, lon:-73.9291725},
+  {address:"75 Beadel Street", unit:"#3", neighborhood:"East Williamsburg", rent:4300, beds:3, baths:1, lines:["G"], source:"StreetEasy / Trulia", url:"https://streeteasy.com/property/8592983-75-beadel-street-2r", features:["Open floor plan","In-unit W/D","New kitchen","Hardwood floors"], confidence:"medium", notes:"Farther from L/M/J/Z than most options — closer to G train/Greenpoint border. Unit number inconsistent across sources. Confirm commute fit.", lat:40.7218524, lon:-73.9379097},
+  {address:"96 Moore Street", unit:"#2A/#2R", neighborhood:"East Williamsburg", rent:4300, beds:3, baths:null, lines:["L"], source:"RentHop / William Raveis", url:"https://www.renthop.com/listings/96-moore-street/2a/76010904", features:["On-site laundry","Granite counters","Hardwood floors"], confidence:"low", notes:"CAUTION: sources conflict on bedroom count for this price. Verify bed count directly before applying.", lat:40.7036325, lon:-73.9416763},
+  {address:"1327 Halsey Street", unit:"#1R", neighborhood:"Bushwick", rent:4100, beds:3, baths:null, lines:["L"], source:"RentHop", url:"https://www.renthop.com/listings/1327-halsey-street/1r/76901411", features:["No broker fee","Hardwood floors","Gas stove","Outdoor space","Cats/dogs allowed"], confidence:"medium", notes:"Sourced from a specific RentHop listing via snippet. Price is below the Bushwick 3BR median, so plausible. Confirm current availability.", lat:40.6945125, lon:-73.9069078},
+  {address:"1157 Myrtle Avenue", unit:"#3B", neighborhood:"Bushwick", rent:4123, beds:3, baths:null, lines:["M","J","Z"], source:"RentHop / Apartments.com", url:"https://www.renthop.com/listings/1157-myrtle-avenue/3b/75750547", features:["Stainless kitchen","Hardwood floors","Queen-sized bedrooms","Virtual doorman (bldg)","Laundry room + gym (bldg)"], confidence:"low", notes:"Listing agent: 346 Realty Leasing. Price cited inconsistently across sources — treat exact figure as approximate.", lat:40.6971695, lon:-73.9346857}
+].map(l => ({...l, id: slugify(l.address), addedBy:null, addedAt:null}));
+
+function slugify(addr){ return addr.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,''); }
+
+let state = { listings: BASE_LISTINGS, votes: {}, comments: {} };
+let synced = false;
+let selectedId = null;
+
+const els = {
+  syncTag: document.getElementById('syncTag'),
+  whoSelect: document.getElementById('whoSelect'),
+  cardContainer: document.getElementById('cardContainer'),
+  resultCount: document.getElementById('resultCount'),
+  boardBody: document.getElementById('boardBody'),
+  addModal: document.getElementById('addModal'),
+  modalStatus: document.getElementById('modalStatus'),
+};
+
+function whoAmI(){ return els.whoSelect.value; }
+els.whoSelect.value = localStorage.getItem('apt-who') || 'Alex';
+els.whoSelect.addEventListener('change', () => localStorage.setItem('apt-who', els.whoSelect.value));
+
+function setSyncStatus(live){
+  synced = live;
+  els.syncTag.className = 'synctag ' + (live ? 'live' : 'offline');
+  els.syncTag.innerHTML = `<span class="sync-dot"></span>${live ? 'Synced with group' : 'Offline — local view only'}`;
+}
+
+async function loadState(){
+  try{
+    const res = await fetch(KV_BASE, {cache:'no-store'});
+    if(res.status === 404){
+      await saveState(state, true);
+      setSyncStatus(true);
+      return;
+    }
+    if(!res.ok) throw new Error('fetch failed: ' + res.status);
+    const remote = await res.json();
+    if(remote && remote.listings) state = remote;
+    setSyncStatus(true);
+  }catch(e){
+    setSyncStatus(false);
+  }
+  renderAll();
+}
+
+let saveTimer = null;
+async function saveState(s, silent){
+  try{
+    const res = await fetch(KV_BASE, {method:'PUT', body: JSON.stringify(s)});
+    if(!res.ok) throw new Error('save failed: ' + res.status);
+    setSyncStatus(true);
+  }catch(e){
+    setSyncStatus(false);
+    if(!silent) els.modalStatus.textContent = 'Could not sync — saved locally only. Ask Alex to verify the kvdb.io email link.';
+  }
+}
+
+function persist(){ saveState(state); renderAll(); }
+
+setInterval(async () => {
+  try{
+    const res = await fetch(KV_BASE, {cache:'no-store'});
+    if(res.ok){
+      const remote = await res.json();
+      if(remote && remote.listings){ state = remote; setSyncStatus(true); renderAll(); }
+    }
+  }catch(e){ setSyncStatus(false); }
+}, POLL_MS);
+
+// ---- Map ----
 function isDark(){
   const s = document.documentElement.getAttribute('data-theme');
   if(s === 'dark') return true;
   if(s === 'light') return false;
   return window.matchMedia('(prefers-color-scheme: dark)').matches;
 }
-
 const map = L.map('map', {scrollWheelZoom:true}).setView([40.700, -73.918], 13.2);
-const tileURL = isDark()
-  ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-  : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
-L.tileLayer(tileURL, {
-  attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
-  subdomains: 'abcd', maxZoom: 19
+L.tileLayer(isDark() ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png' : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+  attribution: '&copy; OpenStreetMap contributors &copy; CARTO', subdomains: 'abcd', maxZoom: 19
 }).addTo(map);
-
-const markers = {};
-const cardContainer = document.getElementById('cardContainer');
-const resultCount = document.getElementById('resultCount');
+let markers = {};
 
 function confColor(c){
   const style = getComputedStyle(document.documentElement);
-  return c === 'medium' ? style.getPropertyValue('--warn').trim() : style.getPropertyValue('--bad').trim();
+  return c === 'low' ? style.getPropertyValue('--bad').trim() : style.getPropertyValue('--warn').trim();
 }
-function confLabel(c){ return c === 'medium' ? 'Medium confidence' : 'Low confidence — verify'; }
-function lineBadges(lines){ return lines.map(l => `<span class="line-badge" style="background:var(--line-${l})">${l}</span>`).join(''); }
+function confLabel(c){ return c === 'low' ? 'Low confidence — verify' : 'Medium confidence'; }
+function lineBadges(lines){ return (lines||[]).map(l => `<span class="line-badge" style="background:var(--line-${l})">${l}</span>`).join(''); }
 
-listings.forEach((l, i) => {
-  const marker = L.circleMarker([l.lat, l.lon], {
-    radius: 9, fillColor: confColor(l.confidence), color:'#fff', weight:2, fillOpacity:0.95
-  }).addTo(map);
-  marker.bindPopup(`<b>${l.address}</b> ${l.unit ? '('+l.unit+')' : ''}<br>${l.neighborhood}<br><span class="popup-rent num">$${l.rent.toLocaleString()}/mo</span> · ${l.beds}BR${l.baths?('/'+l.baths+'BA'):''}<div class="popup-lines">${lineBadges(l.lines)}</div>`);
-  marker.on('click', () => selectCard(i));
-  markers[i] = marker;
-});
+function netVotes(id){
+  const v = state.votes[id] || {};
+  let up=0, down=0;
+  Object.values(v).forEach(x => x==='up' ? up++ : x==='down' ? down++ : null);
+  return {up, down, net: up-down};
+}
 
+function rebuildMarkers(){
+  Object.values(markers).forEach(m => map.removeLayer(m));
+  markers = {};
+  state.listings.forEach(l => {
+    const marker = L.circleMarker([l.lat, l.lon], { radius: 9, fillColor: confColor(l.confidence), color:'#fff', weight:2, fillOpacity:0.95 }).addTo(map);
+    const {net} = netVotes(l.id);
+    marker.bindPopup(`<b>${l.address}</b> ${l.unit ? '('+l.unit+')' : ''}<br>${l.neighborhood}<br><span class="popup-rent num">$${l.rent.toLocaleString()}/mo</span> · ${l.beds}BR${l.baths?('/'+l.baths+'BA'):''}<br>Net votes: ${net>0?'+':''}${net}<div class="popup-lines">${lineBadges(l.lines)}</div>`);
+    marker.on('click', () => selectListing(l.id));
+    markers[l.id] = marker;
+  });
+}
+
+function selectListing(id){
+  selectedId = id;
+  document.querySelectorAll('.card').forEach(c => c.classList.toggle('active', c.dataset.id === id));
+  document.querySelectorAll('.pin').forEach(p => {});
+  const l = state.listings.find(x => x.id === id);
+  if(l && markers[id]){ map.setView([l.lat, l.lon], 15); markers[id].openPopup(); }
+  const card = document.querySelector(`.card[data-id="${id}"]`);
+  if(card) card.scrollIntoView({behavior:'smooth', block:'center'});
+}
+
+// ---- Voting / comments ----
+function castVote(id, dir){
+  const me = whoAmI();
+  if(!state.votes[id]) state.votes[id] = {};
+  state.votes[id][me] = state.votes[id][me] === dir ? undefined : dir;
+  if(state.votes[id][me] === undefined) delete state.votes[id][me];
+  persist();
+}
+function addComment(id, text){
+  if(!text.trim()) return;
+  if(!state.comments[id]) state.comments[id] = [];
+  state.comments[id].push({author: whoAmI(), text: text.trim(), ts: Date.now()});
+  persist();
+}
+function timeAgo(ts){
+  const s = Math.floor((Date.now()-ts)/1000);
+  if(s<60) return 'just now';
+  if(s<3600) return Math.floor(s/60)+'m ago';
+  if(s<86400) return Math.floor(s/3600)+'h ago';
+  return Math.floor(s/86400)+'d ago';
+}
+
+// ---- Render: listings ----
 function renderCards(items){
-  cardContainer.innerHTML = '';
-  resultCount.textContent = `${items.length} of ${listings.length} listings`;
-  items.forEach(({l, i}) => {
+  els.cardContainer.innerHTML = '';
+  els.resultCount.textContent = `${items.length} of ${state.listings.length} listings`;
+  items.forEach(l => {
+    const {up, down, net} = netVotes(l.id);
+    const myVote = (state.votes[l.id] || {})[whoAmI()];
+    const comments = state.comments[l.id] || [];
     const card = document.createElement('div');
-    card.className = 'card';
-    card.dataset.idx = i;
+    card.className = 'card' + (selectedId === l.id ? ' active' : '');
+    card.dataset.id = l.id;
     card.innerHTML = `
       <div class="card-top">
         <div>
           <div class="card-addr">${l.address}${l.unit ? ' · '+l.unit : ''}</div>
-          <div class="card-hood">${l.neighborhood}</div>
+          <div class="card-hood">${l.neighborhood}${l.addedBy ? ' · added by '+l.addedBy : ''}</div>
         </div>
-        <div class="card-rent num">$${l.rent.toLocaleString()}<br><small>/ month</small></div>
+        <div class="card-rent num">$${l.rent.toLocaleString()}<small>/ month</small></div>
       </div>
       <div class="card-meta">
         <span class="chip num">${l.beds}BR${l.baths ? '/'+l.baths+'BA' : ''}</span>
         <span class="chip">${l.source}</span>
         <div class="lines">${lineBadges(l.lines)}</div>
       </div>
-      ${l.features.length ? `<div class="card-features">${l.features.map(f=>`<span>${f}</span>`).join('')}</div>` : ''}
-      <div class="confidence conf-${l.confidence}"><span class="conf-dot"></span>${confLabel(l.confidence)}</div>
-      <div class="card-notes">${l.notes}</div>
-      <a class="card-link" href="${l.url}" target="_blank" rel="noopener">View source →</a>
+      ${l.features && l.features.length ? `<div class="card-features">${l.features.map(f=>`<span>${f}</span>`).join('')}</div>` : ''}
+      ${l.confidence ? `<div class="confidence conf-${l.confidence}"><span class="conf-dot"></span>${confLabel(l.confidence)}</div>` : ''}
+      ${l.notes ? `<div class="card-notes">${l.notes}</div>` : ''}
+      ${l.url ? `<a class="card-link" href="${l.url}" target="_blank" rel="noopener">View source →</a>` : ''}
+      <div class="vote-row">
+        <button class="vote-btn up ${myVote==='up'?'on':''}" data-vote="up">👍 ${up}</button>
+        <button class="vote-btn down ${myVote==='down'?'on':''}" data-vote="down">👎 ${down}</button>
+        <span class="vote-tally num">Net ${net>0?'+':''}${net}</span>
+      </div>
+      <div class="comments">
+        ${comments.map(c => `<div class="comment"><div class="comment-head"><span class="comment-author">${c.author}</span><span>${timeAgo(c.ts)}</span></div>${c.text}</div>`).join('')}
+        <div class="comment-form">
+          <input type="text" placeholder="Add a comment as ${whoAmI()}…" class="comment-input">
+          <button class="comment-post">Post</button>
+        </div>
+      </div>
     `;
-    card.addEventListener('click', (e) => {
-      if(e.target.tagName === 'A') return;
-      selectCard(i);
-      map.setView([l.lat, l.lon], 15);
-      markers[i].openPopup();
-    });
-    cardContainer.appendChild(card);
+    card.querySelector('.card-top').addEventListener('click', () => selectListing(l.id));
+    card.querySelectorAll('.vote-btn').forEach(btn => btn.addEventListener('click', () => castVote(l.id, btn.dataset.vote)));
+    const input = card.querySelector('.comment-input');
+    const post = () => { addComment(l.id, input.value); input.value=''; };
+    card.querySelector('.comment-post').addEventListener('click', post);
+    input.addEventListener('keydown', e => { if(e.key === 'Enter') post(); });
+    els.cardContainer.appendChild(card);
   });
-}
-
-function selectCard(i){
-  document.querySelectorAll('.card').forEach(c => c.classList.remove('active'));
-  const card = document.querySelector(`.card[data-idx="${i}"]`);
-  if(card){ card.classList.add('active'); card.scrollIntoView({behavior:'smooth', block:'center'}); }
 }
 
 function applyFilters(){
   const q = document.getElementById('searchBox').value.toLowerCase();
   const hood = document.getElementById('hoodFilter').value;
   const sort = document.getElementById('sortBy').value;
-  let items = listings.map((l,i) => ({l,i})).filter(({l}) => {
+  let items = state.listings.filter(l => {
     const matchesQ = !q || l.address.toLowerCase().includes(q);
     const matchesHood = !hood || l.neighborhood === hood;
     return matchesQ && matchesHood;
   });
   const confRank = {low:0, medium:1};
-  if(sort === 'rent-asc') items.sort((a,b) => a.l.rent - b.l.rent);
-  else if(sort === 'rent-desc') items.sort((a,b) => b.l.rent - a.l.rent);
-  else if(sort === 'confidence') items.sort((a,b) => confRank[b.l.confidence]-confRank[a.l.confidence]);
+  if(sort === 'rent-asc') items.sort((a,b) => a.rent - b.rent);
+  else if(sort === 'rent-desc') items.sort((a,b) => b.rent - a.rent);
+  else if(sort === 'votes-desc') items.sort((a,b) => netVotes(b.id).net - netVotes(a.id).net);
+  else if(sort === 'confidence') items.sort((a,b) => (confRank[b.confidence]||2)-(confRank[a.confidence]||2));
   renderCards(items);
 }
+
+// ---- Render: board ----
+function renderBoard(){
+  const ranked = [...state.listings].sort((a,b) => netVotes(b.id).net - netVotes(a.id).net);
+  els.boardBody.innerHTML = ranked.map((l, i) => {
+    const {net} = netVotes(l.id);
+    const comments = state.comments[l.id] || [];
+    const last = comments[comments.length-1];
+    const netClass = net > 0 ? 'pos' : net < 0 ? 'neg' : 'zero';
+    return `
+      <tr data-id="${l.id}">
+        <td class="board-rank">${i+1}</td>
+        <td><div class="board-addr">${l.address}</div><div class="board-hood">${l.neighborhood}</div></td>
+        <td class="num">$${l.rent.toLocaleString()}</td>
+        <td class="board-net num ${netClass}">${net>0?'+':''}${net}</td>
+        <td class="board-comment-snip">${last ? `<b>${last.author}:</b> ${last.text}` : '—'}</td>
+      </tr>`;
+  }).join('');
+  els.boardBody.querySelectorAll('tr').forEach(tr => tr.addEventListener('click', () => {
+    switchView('listings'); selectListing(tr.dataset.id);
+  }));
+}
+
+function renderAll(){
+  rebuildMarkers();
+  applyFilters();
+  renderBoard();
+}
+
+// ---- View switching ----
+function switchView(name){
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.view === name));
+  document.getElementById('view-listings').classList.toggle('active', name === 'listings');
+  document.getElementById('view-board').classList.toggle('active', name === 'board');
+  if(name === 'listings') setTimeout(() => map.invalidateSize(), 50);
+}
+document.querySelectorAll('.tab-btn').forEach(b => b.addEventListener('click', () => switchView(b.dataset.view)));
 
 document.getElementById('searchBox').addEventListener('input', applyFilters);
 document.getElementById('hoodFilter').addEventListener('change', applyFilters);
 document.getElementById('sortBy').addEventListener('change', applyFilters);
 
-applyFilters();
+// ---- Add listing modal ----
+document.getElementById('addBtn').addEventListener('click', () => els.addModal.classList.add('open'));
+document.getElementById('modalCancel').addEventListener('click', () => els.addModal.classList.remove('open'));
+els.addModal.addEventListener('click', e => { if(e.target === els.addModal) els.addModal.classList.remove('open'); });
+
+document.getElementById('modalSubmit').addEventListener('click', async () => {
+  const address = document.getElementById('f-address').value.trim();
+  const rent = parseInt(document.getElementById('f-rent').value, 10);
+  if(!address || !rent){ els.modalStatus.textContent = 'Address and rent are required.'; return; }
+  els.modalStatus.textContent = 'Looking up location…';
+  document.getElementById('modalSubmit').disabled = true;
+  try{
+    const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(address + ', Brooklyn, NY')}&format=json&limit=1`);
+    const geo = await geoRes.json();
+    if(!geo.length){ els.modalStatus.textContent = "Couldn't find that address on the map — check spelling and try again."; document.getElementById('modalSubmit').disabled = false; return; }
+    const lines = Array.from(document.querySelectorAll('.line-checks input:checked')).map(c => c.value);
+    const listing = {
+      id: slugify(address) + '-' + Date.now().toString(36),
+      address, unit: document.getElementById('f-unit').value.trim() || null,
+      neighborhood: document.getElementById('f-hood').value,
+      rent, beds: parseInt(document.getElementById('f-beds').value,10) || null,
+      baths: parseInt(document.getElementById('f-baths').value,10) || null,
+      lines, source: 'Added by ' + whoAmI(),
+      url: document.getElementById('f-url').value.trim() || null,
+      features: [], confidence: null,
+      notes: document.getElementById('f-notes').value.trim() || null,
+      lat: parseFloat(geo[0].lat), lon: parseFloat(geo[0].lon),
+      addedBy: whoAmI(), addedAt: Date.now()
+    };
+    state.listings.push(listing);
+    await saveState(state);
+    renderAll();
+    els.modalStatus.textContent = '';
+    els.addModal.classList.remove('open');
+    ['f-address','f-unit','f-rent','f-beds','f-baths','f-url','f-notes'].forEach(id => document.getElementById(id).value = '');
+    document.querySelectorAll('.line-checks input').forEach(c => c.checked = false);
+    switchView('listings'); selectListing(listing.id);
+  }catch(e){
+    els.modalStatus.textContent = 'Something went wrong looking up that address — try again.';
+  }
+  document.getElementById('modalSubmit').disabled = false;
+});
+
+loadState();
 </script>
 </body>
 </html>
