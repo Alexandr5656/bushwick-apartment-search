@@ -151,11 +151,12 @@
   .card-link{display:inline-block;margin-top:11px;font-size:12.5px;color:var(--accent);text-decoration:none;font-weight:600;}
   .card-link:hover{ text-decoration:underline; }
 
-  .delete-listing-btn{
+  .delete-listing-btn, .edit-listing-btn{
     background:transparent; border:1px solid var(--border); color:var(--muted-weak);
     border-radius:6px; width:30px; height:30px; font-size:13px; cursor:pointer; flex:none;
   }
   .delete-listing-btn:hover{ background:var(--bad-bg); border-color:var(--bad); color:var(--bad); }
+  .edit-listing-btn:hover{ background:var(--accent-weak); border-color:var(--accent); color:var(--accent); }
   .delete-comment-btn{
     background:none; border:none; color:var(--muted-weak); font-size:11px; cursor:pointer;
     padding:0; text-decoration:underline;
@@ -344,9 +345,12 @@
 
 <div class="modal-backdrop" id="addModal">
   <div class="modal">
-    <h2>Add a listing</h2>
-    <label for="f-address">Address *</label>
-    <input id="f-address" type="text" placeholder="e.g. 123 Grove Street">
+    <h2 id="modalTitle">Add a listing</h2>
+    <p style="margin:0 0 4px;font-size:12px;color:var(--muted);">Paste just a link now if that's all you have — you can reopen this later (via the ✎ edit button on the card) to fill in the rest.</p>
+    <label for="f-url">Listing URL</label>
+    <input id="f-url" type="url" placeholder="https://…">
+    <label for="f-address">Address</label>
+    <input id="f-address" type="text" placeholder="e.g. 123 Grove Street (leave blank if you only have the link)">
     <label for="f-unit">Unit (optional)</label>
     <input id="f-unit" type="text" placeholder="e.g. #2R">
     <label for="f-hood">Neighborhood</label>
@@ -354,7 +358,7 @@
       <option>Bushwick</option>
       <option>East Williamsburg</option>
     </select>
-    <label for="f-rent">Monthly rent *</label>
+    <label for="f-rent">Monthly rent</label>
     <input id="f-rent" type="number" placeholder="4300">
     <label for="f-beds">Bedrooms / Bathrooms</label>
     <div style="display:flex;gap:8px;">
@@ -369,8 +373,6 @@
       <label><input type="checkbox" value="Z"> Z</label>
       <label><input type="checkbox" value="G"> G</label>
     </div>
-    <label for="f-url">Listing URL (optional)</label>
-    <input id="f-url" type="url" placeholder="https://…">
     <label for="f-notes">Notes (optional)</label>
     <textarea id="f-notes" rows="2" placeholder="Anything worth flagging"></textarea>
     <div class="modal-status" id="modalStatus"></div>
@@ -523,9 +525,11 @@ function rebuildMarkers(){
   Object.values(markers).forEach(m => map.removeLayer(m));
   markers = {};
   state.listings.forEach(l => {
+    if(l.lat == null || l.lon == null) return;
     const marker = L.circleMarker([l.lat, l.lon], { radius: 9, fillColor: confColor(l.confidence), color:'#fff', weight:2, fillOpacity:0.95 }).addTo(map);
     const {net} = netVotes(l.id);
-    marker.bindPopup(`<b>${l.address}</b> ${l.unit ? '('+l.unit+')' : ''}<br>${l.neighborhood}<br><span class="popup-rent num">$${l.rent.toLocaleString()}/mo</span> · ${l.beds}BR${l.baths?('/'+l.baths+'BA'):''}<br>Net votes: ${net>0?'+':''}${net}<div class="popup-lines">${lineBadges(l.lines)}</div>`);
+    const rentTxt = l.rent ? `$${l.rent.toLocaleString()}/mo` : 'Rent TBD';
+    marker.bindPopup(`<b>${l.address||'(no address)'}</b> ${l.unit ? '('+l.unit+')' : ''}<br>${l.neighborhood||''}<br><span class="popup-rent num">${rentTxt}</span> · ${l.beds||'?'}BR${l.baths?('/'+l.baths+'BA'):''}<br>Net votes: ${net>0?'+':''}${net}<div class="popup-lines">${lineBadges(l.lines)}</div>`);
     marker.on('click', () => selectListing(l.id));
     markers[l.id] = marker;
   });
@@ -584,25 +588,28 @@ function renderCards(items){
     const {up, down, net} = netVotes(l.id);
     const myVote = (state.votes[l.id] || {})[whoAmI()];
     const comments = state.comments[l.id] || [];
+    const needsInfo = !l.address || !l.rent || l.lat == null;
     const card = document.createElement('div');
     card.className = 'card' + (selectedId === l.id ? ' active' : '');
     card.dataset.id = l.id;
     card.innerHTML = `
       <div class="card-top">
         <div>
-          <div class="card-addr">${l.address}${l.unit ? ' · '+l.unit : ''}</div>
-          <div class="card-hood">${l.neighborhood}${l.addedBy ? ' · added by '+l.addedBy : ''}</div>
+          <div class="card-addr">${l.address || '(no address yet)'}${l.unit ? ' · '+l.unit : ''}</div>
+          <div class="card-hood">${l.neighborhood || ''}${l.addedBy ? ' · added by '+l.addedBy : ''}</div>
         </div>
         <div style="display:flex;align-items:flex-start;gap:8px;">
-          <div class="card-rent num">$${l.rent.toLocaleString()}<small>/ month</small></div>
+          <div class="card-rent num">${l.rent ? '$'+l.rent.toLocaleString() : 'Rent TBD'}<small>${l.rent ? '/ month' : ''}</small></div>
+          <button class="edit-listing-btn" title="Edit this listing" aria-label="Edit this listing">✎</button>
           <button class="delete-listing-btn" title="Remove this listing" aria-label="Remove this listing">🗑</button>
         </div>
       </div>
       <div class="card-meta">
-        <span class="chip num">${l.beds}BR${l.baths ? '/'+l.baths+'BA' : ''}</span>
-        <span class="chip">${l.source}</span>
+        ${l.beds ? `<span class="chip num">${l.beds}BR${l.baths ? '/'+l.baths+'BA' : ''}</span>` : ''}
+        ${l.source ? `<span class="chip">${l.source}</span>` : ''}
         <div class="lines">${lineBadges(l.lines)}</div>
       </div>
+      ${needsInfo ? `<div class="confidence" style="background:var(--accent-weak);color:var(--accent);"><span class="conf-dot"></span>Needs info — click ✎ to fill in details</div>` : ''}
       ${l.features && l.features.length ? `<div class="card-features">${l.features.map(f=>`<span>${f}</span>`).join('')}</div>` : ''}
       ${l.confidence ? `<div class="confidence conf-${l.confidence}"><span class="conf-dot"></span>${confLabel(l.confidence)}</div>` : ''}
       ${l.notes ? `<div class="card-notes">${l.notes}</div>` : ''}
@@ -620,8 +627,9 @@ function renderCards(items){
         </div>
       </div>
     `;
-    card.querySelector('.card-top').addEventListener('click', (e) => { if(e.target.closest('.delete-listing-btn')) return; selectListing(l.id); });
-    card.querySelector('.delete-listing-btn').addEventListener('click', (e) => { e.stopPropagation(); deleteListing(l.id, l.address); });
+    card.querySelector('.card-top').addEventListener('click', (e) => { if(e.target.closest('.delete-listing-btn') || e.target.closest('.edit-listing-btn')) return; selectListing(l.id); });
+    card.querySelector('.delete-listing-btn').addEventListener('click', (e) => { e.stopPropagation(); deleteListing(l.id, l.address || l.url || 'this listing'); });
+    card.querySelector('.edit-listing-btn').addEventListener('click', (e) => { e.stopPropagation(); openModal(l); });
     card.querySelectorAll('.vote-btn').forEach(btn => btn.addEventListener('click', () => castVote(l.id, btn.dataset.vote)));
     card.querySelectorAll('.delete-comment-btn').forEach(btn => btn.addEventListener('click', () => deleteComment(l.id, Number(btn.dataset.ts))));
     const input = card.querySelector('.comment-input');
@@ -642,8 +650,8 @@ function applyFilters(){
     return matchesQ && matchesHood;
   });
   const confRank = {low:0, medium:1};
-  if(sort === 'rent-asc') items.sort((a,b) => a.rent - b.rent);
-  else if(sort === 'rent-desc') items.sort((a,b) => b.rent - a.rent);
+  if(sort === 'rent-asc') items.sort((a,b) => (a.rent ?? Infinity) - (b.rent ?? Infinity));
+  else if(sort === 'rent-desc') items.sort((a,b) => (b.rent ?? -Infinity) - (a.rent ?? -Infinity));
   else if(sort === 'votes-desc') items.sort((a,b) => netVotes(b.id).net - netVotes(a.id).net);
   else if(sort === 'confidence') items.sort((a,b) => (confRank[b.confidence]||2)-(confRank[a.confidence]||2));
   renderCards(items);
@@ -660,8 +668,8 @@ function renderBoard(){
     return `
       <tr data-id="${l.id}">
         <td class="board-rank">${i+1}</td>
-        <td><div class="board-addr">${l.address}</div><div class="board-hood">${l.neighborhood}</div></td>
-        <td class="num">$${l.rent.toLocaleString()}</td>
+        <td><div class="board-addr">${l.address || '(no address yet)'}</div><div class="board-hood">${l.neighborhood || ''}</div></td>
+        <td class="num">${l.rent ? '$'+l.rent.toLocaleString() : 'TBD'}</td>
         <td class="board-net num ${netClass}">${net>0?'+':''}${net}</td>
         <td class="board-comment-snip">${last ? `<b>${last.author}:</b> ${last.text}` : '—'}</td>
       </tr>`;
@@ -690,47 +698,102 @@ document.getElementById('searchBox').addEventListener('input', applyFilters);
 document.getElementById('hoodFilter').addEventListener('change', applyFilters);
 document.getElementById('sortBy').addEventListener('change', applyFilters);
 
-// ---- Add listing modal ----
-document.getElementById('addBtn').addEventListener('click', () => els.addModal.classList.add('open'));
+// ---- Add / Edit listing modal ----
+const modalTitle = document.getElementById('modalTitle');
+const modalSubmit = document.getElementById('modalSubmit');
+let editingId = null;
+const FORM_IDS = ['f-url','f-address','f-unit','f-rent','f-beds','f-baths','f-notes'];
+
+function openModal(listing){
+  editingId = listing ? listing.id : null;
+  modalTitle.textContent = listing ? 'Edit listing' : 'Add a listing';
+  modalSubmit.textContent = listing ? 'Save changes' : 'Add listing';
+  els.modalStatus.textContent = '';
+  document.getElementById('f-url').value = listing?.url || '';
+  document.getElementById('f-address').value = listing?.address || '';
+  document.getElementById('f-unit').value = listing?.unit || '';
+  document.getElementById('f-hood').value = listing?.neighborhood || 'Bushwick';
+  document.getElementById('f-rent').value = listing?.rent || '';
+  document.getElementById('f-beds').value = listing ? (listing.beds || '') : 3;
+  document.getElementById('f-baths').value = listing?.baths || '';
+  document.getElementById('f-notes').value = listing?.notes || '';
+  const activeLines = new Set(listing?.lines || []);
+  document.querySelectorAll('.line-checks input').forEach(c => c.checked = activeLines.has(c.value));
+  els.addModal.classList.add('open');
+}
+
+document.getElementById('addBtn').addEventListener('click', () => openModal(null));
 document.getElementById('modalCancel').addEventListener('click', () => els.addModal.classList.remove('open'));
 els.addModal.addEventListener('click', e => { if(e.target === els.addModal) els.addModal.classList.remove('open'); });
 
-document.getElementById('modalSubmit').addEventListener('click', async () => {
+modalSubmit.addEventListener('click', async () => {
   const address = document.getElementById('f-address').value.trim();
-  const rent = parseInt(document.getElementById('f-rent').value, 10);
-  if(!address || !rent){ els.modalStatus.textContent = 'Address and rent are required.'; return; }
-  els.modalStatus.textContent = 'Looking up location…';
-  document.getElementById('modalSubmit').disabled = true;
-  try{
-    const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(address + ', Brooklyn, NY')}&format=json&limit=1`);
-    const geo = await geoRes.json();
-    if(!geo.length){ els.modalStatus.textContent = "Couldn't find that address on the map — check spelling and try again."; document.getElementById('modalSubmit').disabled = false; return; }
-    const lines = Array.from(document.querySelectorAll('.line-checks input:checked')).map(c => c.value);
+  const url = document.getElementById('f-url').value.trim();
+  const rentVal = document.getElementById('f-rent').value;
+  const rent = rentVal ? parseInt(rentVal, 10) : null;
+  if(!address && !url){ els.modalStatus.textContent = 'Add at least a listing link or an address.'; return; }
+
+  modalSubmit.disabled = true;
+  const existing = editingId ? state.listings.find(x => x.id === editingId) : null;
+  let lat = existing ? existing.lat : null;
+  let lon = existing ? existing.lon : null;
+  const addressChanged = address && (!existing || existing.address !== address);
+
+  if(address && (addressChanged || lat == null)){
+    els.modalStatus.textContent = 'Looking up location…';
+    try{
+      const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(address + ', Brooklyn, NY')}&format=json&limit=1`);
+      const geo = await geoRes.json();
+      if(!geo.length){
+        els.modalStatus.textContent = "Couldn't find that address on the map — check spelling, or leave it blank and add the link only for now.";
+        modalSubmit.disabled = false;
+        return;
+      }
+      lat = parseFloat(geo[0].lat); lon = parseFloat(geo[0].lon);
+    }catch(e){
+      els.modalStatus.textContent = 'Something went wrong looking up that address — try again.';
+      modalSubmit.disabled = false;
+      return;
+    }
+  } else if(!address){
+    lat = null; lon = null;
+  }
+
+  const lines = Array.from(document.querySelectorAll('.line-checks input:checked')).map(c => c.value);
+  const fields = {
+    address: address || null,
+    unit: document.getElementById('f-unit').value.trim() || null,
+    neighborhood: document.getElementById('f-hood').value,
+    rent, beds: parseInt(document.getElementById('f-beds').value,10) || null,
+    baths: parseInt(document.getElementById('f-baths').value,10) || null,
+    lines, url: url || null,
+    notes: document.getElementById('f-notes').value.trim() || null,
+    lat, lon
+  };
+
+  let targetId;
+  if(existing){
+    Object.assign(existing, fields);
+    targetId = existing.id;
+  }else{
     const listing = {
-      id: slugify(address) + '-' + Date.now().toString(36),
-      address, unit: document.getElementById('f-unit').value.trim() || null,
-      neighborhood: document.getElementById('f-hood').value,
-      rent, beds: parseInt(document.getElementById('f-beds').value,10) || null,
-      baths: parseInt(document.getElementById('f-baths').value,10) || null,
-      lines, source: 'Added by ' + whoAmI(),
-      url: document.getElementById('f-url').value.trim() || null,
+      id: (slugify(address || url || 'listing')) + '-' + Date.now().toString(36),
+      ...fields,
+      source: 'Added by ' + whoAmI(),
       features: [], confidence: null,
-      notes: document.getElementById('f-notes').value.trim() || null,
-      lat: parseFloat(geo[0].lat), lon: parseFloat(geo[0].lon),
       addedBy: whoAmI(), addedAt: Date.now()
     };
     state.listings.push(listing);
-    await saveState(state);
-    renderAll();
-    els.modalStatus.textContent = '';
-    els.addModal.classList.remove('open');
-    ['f-address','f-unit','f-rent','f-beds','f-baths','f-url','f-notes'].forEach(id => document.getElementById(id).value = '');
-    document.querySelectorAll('.line-checks input').forEach(c => c.checked = false);
-    switchView('listings'); selectListing(listing.id);
-  }catch(e){
-    els.modalStatus.textContent = 'Something went wrong looking up that address — try again.';
+    targetId = listing.id;
   }
-  document.getElementById('modalSubmit').disabled = false;
+
+  await saveState(state);
+  renderAll();
+  els.modalStatus.textContent = '';
+  els.addModal.classList.remove('open');
+  editingId = null;
+  switchView('listings'); selectListing(targetId);
+  modalSubmit.disabled = false;
 });
 
 loadState();
