@@ -372,8 +372,7 @@
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
 <script>
-const KV_BASE = 'https://kvdb.io/AsmSvkAefXc8JJLRmNWQP7/state';
-const POLL_MS = 8000;
+const POLL_MS = 15000;
 
 const BASE_LISTINGS = [
   {address:"37 Aberdeen Street", unit:"#3/#4 (uncertain)", neighborhood:"Bushwick", rent:4354, beds:3, baths:2, lines:["L"], source:"StreetEasy", url:"https://streeteasy.com/building/37-aberdeen-street-brooklyn", features:["Net effective rent (concession implied)","Hardwood floors","New construction"], confidence:"medium", notes:"Price/unit derived from search snippet, not a fetched listing page. Exact unit number and current availability unverified.", lat:40.6819644, lon:-73.9063007},
@@ -396,6 +395,20 @@ function slugify(addr){ return addr.toLowerCase().replace(/[^a-z0-9]+/g,'-').rep
 let state = { listings: BASE_LISTINGS, votes: {}, comments: {} };
 let synced = false;
 let selectedId = null;
+let currentSha = null;
+
+// Fine-grained PAT scoped ONLY to Alexandr5656/apt-search-data (Contents: Read and write).
+// Injected at deploy time by the GitHub Actions workflow from a repo secret — never committed in plaintext.
+const GH_TOKEN = '__GH_DATA_TOKEN__';
+const GH_API = 'https://api.github.com/repos/Alexandr5656/apt-search-data/contents/state.json';
+const GH_HEADERS = { 'Authorization': 'Bearer ' + GH_TOKEN, 'Accept': 'application/vnd.github+json' };
+
+function b64EncodeUnicode(str){
+  return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, (_, p) => String.fromCharCode('0x' + p)));
+}
+function b64DecodeUnicode(str){
+  return decodeURIComponent(atob(str).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join(''));
+}
 
 const els = {
   syncTag: document.getElementById('syncTag'),
@@ -419,14 +432,11 @@ function setSyncStatus(live){
 
 async function loadState(){
   try{
-    const res = await fetch(KV_BASE, {cache:'no-store'});
-    if(res.status === 404){
-      await saveState(state, true);
-      setSyncStatus(true);
-      return;
-    }
+    const res = await fetch(GH_API, { headers: GH_HEADERS, cache:'no-store' });
     if(!res.ok) throw new Error('fetch failed: ' + res.status);
-    const remote = await res.json();
+    const json = await res.json();
+    currentSha = json.sha;
+    const remote = JSON.parse(b64DecodeUnicode(json.content.replace(/\n/g,'')));
     if(remote && remote.listings) state = remote;
     setSyncStatus(true);
   }catch(e){
@@ -435,15 +445,26 @@ async function loadState(){
   renderAll();
 }
 
-let saveTimer = null;
 async function saveState(s, silent){
   try{
-    const res = await fetch(KV_BASE, {method:'PUT', body: JSON.stringify(s)});
+    // Refetch sha immediately before writing to minimize lost-update races between the 3 of you.
+    const shaRes = await fetch(GH_API, { headers: GH_HEADERS, cache:'no-store' });
+    if(shaRes.ok){ const j = await shaRes.json(); currentSha = j.sha; }
+    const res = await fetch(GH_API, {
+      method: 'PUT', headers: { ...GH_HEADERS, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: 'Update from ' + whoAmI() + ' at ' + new Date().toISOString(),
+        content: b64EncodeUnicode(JSON.stringify(s, null, 2)),
+        sha: currentSha
+      })
+    });
     if(!res.ok) throw new Error('save failed: ' + res.status);
+    const json = await res.json();
+    currentSha = json.content.sha;
     setSyncStatus(true);
   }catch(e){
     setSyncStatus(false);
-    if(!silent) els.modalStatus.textContent = 'Could not sync — saved locally only. Ask Alex to verify the kvdb.io email link.';
+    if(!silent) els.modalStatus.textContent = 'Could not sync — saved locally only. Try again in a moment.';
   }
 }
 
@@ -451,11 +472,12 @@ function persist(){ saveState(state); renderAll(); }
 
 setInterval(async () => {
   try{
-    const res = await fetch(KV_BASE, {cache:'no-store'});
+    const res = await fetch(GH_API, { headers: GH_HEADERS, cache:'no-store' });
     if(res.ok){
-      const remote = await res.json();
-      if(remote && remote.listings){ state = remote; setSyncStatus(true); renderAll(); }
-    }
+      const json = await res.json();
+      const remote = JSON.parse(b64DecodeUnicode(json.content.replace(/\n/g,'')));
+      if(remote && remote.listings){ currentSha = json.sha; state = remote; setSyncStatus(true); renderAll(); }
+    } else { setSyncStatus(false); }
   }catch(e){ setSyncStatus(false); }
 }, POLL_MS);
 
