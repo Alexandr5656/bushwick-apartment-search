@@ -151,6 +151,17 @@
   .card-link{display:inline-block;margin-top:11px;font-size:12.5px;color:var(--accent);text-decoration:none;font-weight:600;}
   .card-link:hover{ text-decoration:underline; }
 
+  .delete-listing-btn{
+    background:transparent; border:1px solid var(--border); color:var(--muted-weak);
+    border-radius:6px; width:30px; height:30px; font-size:13px; cursor:pointer; flex:none;
+  }
+  .delete-listing-btn:hover{ background:var(--bad-bg); border-color:var(--bad); color:var(--bad); }
+  .delete-comment-btn{
+    background:none; border:none; color:var(--muted-weak); font-size:11px; cursor:pointer;
+    padding:0; text-decoration:underline;
+  }
+  .delete-comment-btn:hover{ color:var(--bad); }
+
   .vote-row{display:flex;align-items:center;gap:10px;margin-top:12px;padding-top:12px;border-top:1px dashed var(--border);}
   .vote-btn{
     display:flex;align-items:center;gap:6px;border:1px solid var(--border);background:var(--bg);
@@ -544,6 +555,19 @@ function addComment(id, text){
   state.comments[id].push({author: whoAmI(), text: text.trim(), ts: Date.now()});
   persist();
 }
+function deleteComment(id, ts){
+  if(!state.comments[id]) return;
+  state.comments[id] = state.comments[id].filter(c => c.ts !== ts);
+  persist();
+}
+function deleteListing(id, address){
+  if(!confirm(`Remove "${address}" from the board? This deletes its votes and comments too.`)) return;
+  state.listings = state.listings.filter(l => l.id !== id);
+  delete state.votes[id];
+  delete state.comments[id];
+  if(selectedId === id) selectedId = null;
+  persist();
+}
 function timeAgo(ts){
   const s = Math.floor((Date.now()-ts)/1000);
   if(s<60) return 'just now';
@@ -569,7 +593,10 @@ function renderCards(items){
           <div class="card-addr">${l.address}${l.unit ? ' · '+l.unit : ''}</div>
           <div class="card-hood">${l.neighborhood}${l.addedBy ? ' · added by '+l.addedBy : ''}</div>
         </div>
-        <div class="card-rent num">$${l.rent.toLocaleString()}<small>/ month</small></div>
+        <div style="display:flex;align-items:flex-start;gap:8px;">
+          <div class="card-rent num">$${l.rent.toLocaleString()}<small>/ month</small></div>
+          <button class="delete-listing-btn" title="Remove this listing" aria-label="Remove this listing">🗑</button>
+        </div>
       </div>
       <div class="card-meta">
         <span class="chip num">${l.beds}BR${l.baths ? '/'+l.baths+'BA' : ''}</span>
@@ -586,15 +613,17 @@ function renderCards(items){
         <span class="vote-tally num">Net ${net>0?'+':''}${net}</span>
       </div>
       <div class="comments">
-        ${comments.map(c => `<div class="comment"><div class="comment-head"><span class="comment-author">${c.author}</span><span>${timeAgo(c.ts)}</span></div>${c.text}</div>`).join('')}
+        ${comments.map(c => `<div class="comment"><div class="comment-head"><span class="comment-author">${c.author}</span><span>${timeAgo(c.ts)}${c.author===whoAmI() ? ` · <button class="delete-comment-btn" data-ts="${c.ts}">delete</button>` : ''}</span></div>${c.text}</div>`).join('')}
         <div class="comment-form">
           <input type="text" placeholder="Add a comment as ${whoAmI()}…" class="comment-input">
           <button class="comment-post">Post</button>
         </div>
       </div>
     `;
-    card.querySelector('.card-top').addEventListener('click', () => selectListing(l.id));
+    card.querySelector('.card-top').addEventListener('click', (e) => { if(e.target.closest('.delete-listing-btn')) return; selectListing(l.id); });
+    card.querySelector('.delete-listing-btn').addEventListener('click', (e) => { e.stopPropagation(); deleteListing(l.id, l.address); });
     card.querySelectorAll('.vote-btn').forEach(btn => btn.addEventListener('click', () => castVote(l.id, btn.dataset.vote)));
+    card.querySelectorAll('.delete-comment-btn').forEach(btn => btn.addEventListener('click', () => deleteComment(l.id, Number(btn.dataset.ts))));
     const input = card.querySelector('.comment-input');
     const post = () => { addComment(l.id, input.value); input.value=''; };
     card.querySelector('.comment-post').addEventListener('click', post);
