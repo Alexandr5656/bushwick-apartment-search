@@ -207,6 +207,8 @@
   .legend-item{ display:flex; align-items:center; gap:5px; }
   .legend-dot{ width:9px; height:9px; border-radius:50%; }
   .map-wrap{ position:relative; }
+  .station-marker{ display:flex; gap:2px; transform:translate(-50%,-50%); }
+  .station-marker .line-badge{ box-shadow:0 0 0 2px #fff; }
 
   /* Board view */
   .board-wrap{ padding:18px 28px; max-width:960px; margin:0 auto; }
@@ -553,7 +555,8 @@ function lineColor(l){ return getComputedStyle(document.documentElement).getProp
 
 function renderStationMarkers(){
   SUBWAY_STATIONS.forEach(s => {
-    const marker = L.circleMarker([s.lat, s.lon], { radius:5, fillColor: lineColor(s.lines[0]), color:'#fff', weight:1.5, fillOpacity:0.9 }).addTo(map);
+    const icon = L.divIcon({ className:'', html:`<div class="station-marker">${lineBadges(s.lines)}</div>`, iconSize:[0,0] });
+    const marker = L.marker([s.lat, s.lon], { icon }).addTo(map);
     marker.bindPopup(`<b>${s.name}</b><div class="popup-lines">${lineBadges(s.lines)}</div>`);
   });
   LIRR_STATIONS.forEach(s => {
