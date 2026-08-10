@@ -334,6 +334,8 @@
       <div class="legend">
         <div class="legend-item"><span class="legend-dot" style="background:var(--warn);"></span>Medium confidence</div>
         <div class="legend-item"><span class="legend-dot" style="background:var(--bad);"></span>Low confidence</div>
+        <div class="legend-item"><span class="legend-dot" style="background:var(--line-L);"></span>Subway station</div>
+        <div class="legend-item"><span class="legend-dot" style="background:#5a3fc0;"></span>LIRR station</div>
       </div>
     </div>
   </div>
@@ -518,6 +520,47 @@ L.tileLayer(isDark() ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r
   attribution: '&copy; OpenStreetMap contributors &copy; CARTO', subdomains: 'abcd', maxZoom: 19
 }).addTo(map);
 let markers = {};
+
+// Approximate public station locations near the Bushwick/East Williamsburg search area —
+// for walking-distance reference only, not survey-grade.
+const SUBWAY_STATIONS = [
+  {name:"Bedford Ave", lines:["L"], lat:40.7171, lon:-73.9567},
+  {name:"Lorimer St", lines:["L"], lat:40.7140, lon:-73.9478},
+  {name:"Graham Ave", lines:["L"], lat:40.7144, lon:-73.9443},
+  {name:"Grand St", lines:["L"], lat:40.7118, lon:-73.9403},
+  {name:"Montrose Ave", lines:["L"], lat:40.7077, lon:-73.9401},
+  {name:"Morgan Ave", lines:["L"], lat:40.7067, lon:-73.9333},
+  {name:"Jefferson St", lines:["L"], lat:40.7058, lon:-73.9227},
+  {name:"DeKalb Ave", lines:["L"], lat:40.7037, lon:-73.9207},
+  {name:"Myrtle–Wyckoff Ave", lines:["L","M"], lat:40.6996, lon:-73.9111},
+  {name:"Knickerbocker Ave", lines:["M"], lat:40.6996, lon:-73.9203},
+  {name:"Central Ave", lines:["M"], lat:40.6957, lon:-73.9143},
+  {name:"Myrtle Ave", lines:["J","M","Z"], lat:40.6996, lon:-73.9256},
+  {name:"Kosciuszko St", lines:["J","Z"], lat:40.6952, lon:-73.9312},
+  {name:"Gates Ave", lines:["J","Z"], lat:40.6899, lon:-73.9317},
+  {name:"Halsey St", lines:["J"], lat:40.6845, lon:-73.9313},
+  {name:"Chauncey St", lines:["J","Z"], lat:40.6798, lon:-73.9317},
+  {name:"Broadway Junction", lines:["J","Z"], lat:40.6785, lon:-73.9037},
+  {name:"Broadway", lines:["G"], lat:40.7062, lon:-73.9438},
+  {name:"Flushing Ave", lines:["G"], lat:40.7003, lon:-73.9502},
+  {name:"Myrtle–Willoughby Ave", lines:["G"], lat:40.6935, lon:-73.9368},
+];
+const LIRR_STATIONS = [
+  {name:"East New York (LIRR)", lat:40.6656, lon:-73.8814},
+];
+
+function lineColor(l){ return getComputedStyle(document.documentElement).getPropertyValue('--line-'+l).trim(); }
+
+function renderStationMarkers(){
+  SUBWAY_STATIONS.forEach(s => {
+    const marker = L.circleMarker([s.lat, s.lon], { radius:5, fillColor: lineColor(s.lines[0]), color:'#fff', weight:1.5, fillOpacity:0.9 }).addTo(map);
+    marker.bindPopup(`<b>${s.name}</b><div class="popup-lines">${lineBadges(s.lines)}</div>`);
+  });
+  LIRR_STATIONS.forEach(s => {
+    const marker = L.circleMarker([s.lat, s.lon], { radius:6, fillColor:'#5a3fc0', color:'#fff', weight:1.5, fillOpacity:0.9 }).addTo(map);
+    marker.bindPopup(`<b>${s.name}</b><br>LIRR`);
+  });
+}
 
 function confColor(c){
   const style = getComputedStyle(document.documentElement);
@@ -822,6 +865,7 @@ modalSubmit.addEventListener('click', async () => {
   modalSubmit.disabled = false;
 });
 
+renderStationMarkers();
 loadState();
 </script>
 </body>
