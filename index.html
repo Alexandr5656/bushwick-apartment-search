@@ -79,6 +79,11 @@
   .synctag{font-size:11px;padding:3px 9px;border-radius:999px;font-weight:700;display:inline-flex;align-items:center;gap:5px;}
   .synctag.live{background:var(--good-bg);color:var(--good);}
   .synctag.offline{background:var(--bad-bg);color:var(--bad);}
+  .synctag.info{background:var(--accent-weak);color:var(--accent);}
+  .new-badge{
+    display:inline-block;font-size:10px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;
+    background:var(--accent);color:#fff;padding:2px 7px;border-radius:5px;margin-right:6px;vertical-align:middle;
+  }
   .sync-dot{width:6px;height:6px;border-radius:50%;background:currentColor;}
   .tabs{display:flex;gap:4px;}
   .tab-btn{
@@ -285,6 +290,7 @@
       </select>
     </div>
     <span class="synctag offline" id="syncTag"><span class="sync-dot"></span>Connecting…</span>
+    <span class="synctag offline" id="skimTag" style="display:none;"><span class="sync-dot"></span></span>
   </div>
   <div style="display:flex;align-items:center;gap:8px;">
     <div class="tabs">
@@ -309,10 +315,15 @@
           <option value="East Williamsburg">East Williamsburg</option>
         </select>
         <select id="sortBy">
+          <option value="newest">Newest first</option>
           <option value="rent-asc">Rent: Low → High</option>
           <option value="rent-desc">Rent: High → Low</option>
           <option value="votes-desc">Top voted</option>
           <option value="confidence">Confidence first</option>
+        </select>
+        <select id="statusFilter">
+          <option value="">All listings</option>
+          <option value="needsInfo">Needs info (new from email)</option>
         </select>
       </div>
       <div class="count" id="resultCount"></div>
@@ -425,6 +436,7 @@ function b64DecodeUnicode(str){
 
 const els = {
   syncTag: document.getElementById('syncTag'),
+  skimTag: document.getElementById('skimTag'),
   whoSelect: document.getElementById('whoSelect'),
   cardContainer: document.getElementById('cardContainer'),
   resultCount: document.getElementById('resultCount'),
@@ -595,7 +607,7 @@ function renderCards(items){
     card.innerHTML = `
       <div class="card-top">
         <div>
-          <div class="card-addr">${l.address || '(no address yet)'}${l.unit ? ' · '+l.unit : ''}</div>
+          <div class="card-addr">${needsInfo ? '<span class="new-badge">New</span>' : ''}${l.address || '(no address yet)'}${l.unit ? ' · '+l.unit : ''}</div>
           <div class="card-hood">${l.neighborhood || ''}${l.addedBy ? ' · added by '+l.addedBy : ''}</div>
         </div>
         <div style="display:flex;align-items:flex-start;gap:8px;">
@@ -644,13 +656,17 @@ function applyFilters(){
   const q = document.getElementById('searchBox').value.toLowerCase();
   const hood = document.getElementById('hoodFilter').value;
   const sort = document.getElementById('sortBy').value;
+  const status = document.getElementById('statusFilter').value;
   let items = state.listings.filter(l => {
-    const matchesQ = !q || l.address.toLowerCase().includes(q);
+    const matchesQ = !q || (l.address||'').toLowerCase().includes(q);
     const matchesHood = !hood || l.neighborhood === hood;
-    return matchesQ && matchesHood;
+    const needsInfo = !l.address || !l.rent || l.lat == null;
+    const matchesStatus = !status || (status === 'needsInfo' && needsInfo);
+    return matchesQ && matchesHood && matchesStatus;
   });
   const confRank = {low:0, medium:1};
-  if(sort === 'rent-asc') items.sort((a,b) => (a.rent ?? Infinity) - (b.rent ?? Infinity));
+  if(sort === 'newest') items.sort((a,b) => (b.addedAt ?? 0) - (a.addedAt ?? 0));
+  else if(sort === 'rent-asc') items.sort((a,b) => (a.rent ?? Infinity) - (b.rent ?? Infinity));
   else if(sort === 'rent-desc') items.sort((a,b) => (b.rent ?? -Infinity) - (a.rent ?? -Infinity));
   else if(sort === 'votes-desc') items.sort((a,b) => netVotes(b.id).net - netVotes(a.id).net);
   else if(sort === 'confidence') items.sort((a,b) => (confRank[b.confidence]||2)-(confRank[a.confidence]||2));
@@ -679,10 +695,19 @@ function renderBoard(){
   }));
 }
 
+function renderSkimTag(){
+  if(!state.lastEmailSkim || !state.lastEmailSkim.at){ els.skimTag.style.display = 'none'; return; }
+  const at = new Date(state.lastEmailSkim.at).getTime();
+  els.skimTag.style.display = 'inline-flex';
+  els.skimTag.className = 'synctag info';
+  els.skimTag.innerHTML = `<span class="sync-dot"></span>Email checked ${timeAgo(at)} · +${state.lastEmailSkim.added ?? 0} new`;
+}
+
 function renderAll(){
   rebuildMarkers();
   applyFilters();
   renderBoard();
+  renderSkimTag();
 }
 
 // ---- View switching ----
@@ -697,6 +722,7 @@ document.querySelectorAll('.tab-btn').forEach(b => b.addEventListener('click', (
 document.getElementById('searchBox').addEventListener('input', applyFilters);
 document.getElementById('hoodFilter').addEventListener('change', applyFilters);
 document.getElementById('sortBy').addEventListener('change', applyFilters);
+document.getElementById('statusFilter').addEventListener('change', applyFilters);
 
 // ---- Add / Edit listing modal ----
 const modalTitle = document.getElementById('modalTitle');
