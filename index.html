@@ -341,7 +341,7 @@
     </div>
     <div class="map-wrap">
       <div id="map"></div>
-      <button class="heatmap-toggle" id="heatmapToggle" title="Toggle NYPD crime density overlay">🔥 Crime heatmap</button>
+      <button class="heatmap-toggle" id="heatmapToggle" title="Toggle NYPD crime density overlay for all of Brooklyn">🔥 Crime heatmap</button>
       <div class="legend">
         <div class="legend-item"><span class="legend-dot" style="background:var(--warn);"></span>Medium confidence</div>
         <div class="legend-item"><span class="legend-dot" style="background:var(--bad);"></span>Low confidence</div>
@@ -879,7 +879,6 @@ modalSubmit.addEventListener('click', async () => {
 });
 
 // ---- Crime heatmap (NYPD Complaint Data Historic, via NYC Open Data) ----
-const CRIME_BBOX = { minLat: 40.665, maxLat: 40.735, minLon: -73.965, maxLon: -73.895 };
 const CRIME_API = 'https://data.cityofnewyork.us/resource/qgea-i56i.json';
 let heatLayer = null;
 let heatPoints = null;
@@ -905,8 +904,8 @@ async function toggleCrimeHeatmap(){
     const since = new Date();
     since.setFullYear(since.getFullYear() - 1);
     const dateStr = since.toISOString().slice(0, 10);
-    const where = `latitude between ${CRIME_BBOX.minLat} and ${CRIME_BBOX.maxLat} AND longitude between ${CRIME_BBOX.minLon} and ${CRIME_BBOX.maxLon} AND cmplnt_fr_dt >= '${dateStr}T00:00:00.000'`;
-    const url = `${CRIME_API}?$select=latitude,longitude&$where=${encodeURIComponent(where)}&$limit=5000`;
+    const where = `boro_nm = 'BROOKLYN' AND cmplnt_fr_dt >= '${dateStr}T00:00:00.000'`;
+    const url = `${CRIME_API}?$select=latitude,longitude&$where=${encodeURIComponent(where)}&$limit=50000`;
     const res = await fetch(url);
     if(!res.ok) throw new Error('crime fetch failed: ' + res.status);
     const rows = await res.json();
