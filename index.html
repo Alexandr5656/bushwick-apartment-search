@@ -207,6 +207,13 @@
   .legend-item{ display:flex; align-items:center; gap:5px; }
   .legend-dot{ width:9px; height:9px; border-radius:50%; }
   .map-wrap{ position:relative; }
+  .heatmap-toggle{
+    position:absolute; top:12px; right:12px; z-index:400; background:var(--panel);
+    border:1px solid var(--border); border-radius:8px; padding:7px 12px; font-size:12px; font-weight:700;
+    color:var(--text); cursor:pointer; box-shadow:0 2px 8px rgba(0,0,0,.12);
+  }
+  .heatmap-toggle.on{ background:var(--accent); border-color:var(--accent); color:#fff; }
+  .heatmap-toggle:disabled{ opacity:.6; cursor:wait; }
   .station-marker{ display:flex; gap:2px; transform:translate(-50%,-50%); }
   .station-marker .line-badge{ box-shadow:0 0 0 2px #fff; }
 
@@ -326,6 +333,7 @@
         <select id="statusFilter">
           <option value="">All listings</option>
           <option value="needsInfo">Needs info (new from email)</option>
+          <option value="hideNeedsInfo">Hide needs-info (from email)</option>
         </select>
       </div>
       <div class="count" id="resultCount"></div>
@@ -333,6 +341,7 @@
     </div>
     <div class="map-wrap">
       <div id="map"></div>
+      <button class="heatmap-toggle" id="heatmapToggle" title="Toggle NYPD crime density overlay">🔥 Crime heatmap</button>
       <div class="legend">
         <div class="legend-item"><span class="legend-dot" style="background:var(--warn);"></span>Medium confidence</div>
         <div class="legend-item"><span class="legend-dot" style="background:var(--bad);"></span>Low confidence</div>
@@ -399,6 +408,7 @@
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.heat/0.2.0/leaflet-heat.js" crossorigin=""></script>
 <script>
 const POLL_MS = 15000;
 
@@ -707,7 +717,7 @@ function applyFilters(){
     const matchesQ = !q || (l.address||'').toLowerCase().includes(q);
     const matchesHood = !hood || l.neighborhood === hood;
     const needsInfo = !l.address || !l.rent || l.lat == null;
-    const matchesStatus = !status || (status === 'needsInfo' && needsInfo);
+    const matchesStatus = !status || (status === 'needsInfo' && needsInfo) || (status === 'hideNeedsInfo' && !needsInfo);
     return matchesQ && matchesHood && matchesStatus;
   });
   const confRank = {low:0, medium:1};
@@ -867,6 +877,53 @@ modalSubmit.addEventListener('click', async () => {
   switchView('listings'); selectListing(targetId);
   modalSubmit.disabled = false;
 });
+
+// ---- Crime heatmap (NYPD Complaint Data Historic, via NYC Open Data) ----
+const CRIME_BBOX = { minLat: 40.665, maxLat: 40.735, minLon: -73.965, maxLon: -73.895 };
+const CRIME_API = 'https://data.cityofnewyork.us/resource/qgea-i56i.json';
+let heatLayer = null;
+let heatPoints = null;
+const heatBtn = document.getElementById('heatmapToggle');
+
+async function toggleCrimeHeatmap(){
+  if(heatLayer){
+    map.removeLayer(heatLayer);
+    heatLayer = null;
+    heatBtn.classList.remove('on');
+    heatBtn.textContent = '🔥 Crime heatmap';
+    return;
+  }
+  if(heatPoints){
+    heatLayer = L.heatLayer(heatPoints, { radius: 18, blur: 22, maxZoom: 16 }).addTo(map);
+    heatBtn.classList.add('on');
+    heatBtn.textContent = '🔥 Hide crime heatmap';
+    return;
+  }
+  heatBtn.disabled = true;
+  heatBtn.textContent = 'Loading crime data…';
+  try{
+    const since = new Date();
+    since.setFullYear(since.getFullYear() - 1);
+    const dateStr = since.toISOString().slice(0, 10);
+    const where = `latitude between ${CRIME_BBOX.minLat} and ${CRIME_BBOX.maxLat} AND longitude between ${CRIME_BBOX.minLon} and ${CRIME_BBOX.maxLon} AND cmplnt_fr_dt >= '${dateStr}T00:00:00.000'`;
+    const url = `${CRIME_API}?$select=latitude,longitude&$where=${encodeURIComponent(where)}&$limit=5000`;
+    const res = await fetch(url);
+    if(!res.ok) throw new Error('crime fetch failed: ' + res.status);
+    const rows = await res.json();
+    heatPoints = rows
+      .filter(r => r.latitude && r.longitude)
+      .map(r => [parseFloat(r.latitude), parseFloat(r.longitude), 0.5]);
+    if(!heatPoints.length) throw new Error('no crime data returned');
+    heatLayer = L.heatLayer(heatPoints, { radius: 18, blur: 22, maxZoom: 16 }).addTo(map);
+    heatBtn.classList.add('on');
+    heatBtn.textContent = '🔥 Hide crime heatmap';
+  }catch(e){
+    heatBtn.textContent = 'Crime data unavailable — retry';
+  }finally{
+    heatBtn.disabled = false;
+  }
+}
+heatBtn.addEventListener('click', toggleCrimeHeatmap);
 
 renderStationMarkers();
 loadState();
